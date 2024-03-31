@@ -13,8 +13,9 @@ import { auth, db } from "../DataBase/FireBase";
 import { addDoc, collection, orderBy, getDocs } from "firebase/firestore";
 import ListCard from "../Components/ListCard";
 import { values } from "../../node_modules/@mui/system/esm/breakpoints";
-import { Outlet } from 'react-router-dom'
+import { Outlet } from "react-router-dom";
 import { Link } from "react-router-dom";
+import CustomizedDialogs from "../Components/AddDialog";
 
 const Dashboard = () => {
   const [allDatabaseData, setAllDatabaseData] = useState([]);
@@ -96,17 +97,20 @@ const Dashboard = () => {
             <img src={gptLogo} alt="Logo" className="logo" />
             <span className="brand">SQL Bot</span>
           </div>
-          <button className="midBtn">
-            <img src={addBtn} alt="new chat" className="addBtn" />
-            Add Database
-          </button>
+         <CustomizedDialogs/>
           <div className="upperSideBottom">
             {allDatabaseData.map((database) => (
-                 <Link to={"/dashboard/chat?v=" + database.dbname} key={database.dbname}>
-              <button key={database.dbname} className="query">
-                <img src={msgIcon} alt="Query" />
-                {database.dbname}
-              </button>
+              <Link
+                to={`/dashboard/chat?v=${encodeURIComponent(
+                  database.dbname
+                )}&p=${encodeURIComponent(
+                  database.password
+                )}&u=${encodeURIComponent(database.username)}&id=${encodeURIComponent(database.id)}`}
+              >
+                <button key={database.dbname} className="query">
+                  <img src={msgIcon} alt="Query" />
+                  {database.dbname}
+                </button>
               </Link>
             ))}
           </div>
@@ -166,9 +170,9 @@ const Dashboard = () => {
         </div>
       </div>
       <div className="main">
-      <Outlet/>
-        </div>
-       
+        <Outlet />
+      </div>
+
       {/* <Chat/> */}
     </div>
   ) : (
