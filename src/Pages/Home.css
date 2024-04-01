@@ -1,0 +1,99 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-size: 62.5%;
+}
+
+body {
+    background: rgb(3, 0, 31);
+    color: white;
+    font-family: 'Poppins', sans-serif;
+}
+
+.Home {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+}
+
+.middleUpper {
+    text-align: center;
+}
+
+.middleUpper .txt{
+    margin-left: 25rem;
+    margin-right: 25rem;
+    padding: 3rem;
+    font-size: 2.2rem; /* Increased font size */
+    display: flex;
+    align-items: flex-start;
+    text-align: center;
+    font-weight: bold; /* Making text bold */
+}
+
+.middleTop {
+    margin-bottom: 2rem;
+}
+
+.gptLogo {
+    width: 80px;
+    height: 80px;
+    margin-right: 10px;
+}
+
+.brand {
+    font-size: 3rem;
+    font-weight: bold;
+}
+
+.txt {
+    margin-bottom: 2rem;
+    font-size: 1.8rem; /* Increased font size */
+    line-height: 1.6;
+}
+
+.middleBottom {
+    margin-top: 2rem;
+    text-align: center;
+}
+
+.middleBottom p {
+    font-size: 20px;
+    margin-bottom: 15px;
+    font-weight: bold; /* Making text bold */
+}
+
+.buttons {
+    margin-top: 4rem;
+    text-decoration: none;
+}
+
+.addBtn {
+    height: 2rem;
+    padding-right: 1rem;
+  }
+  
+  .midBtn {
+    background: #5A4BFF;
+    border: none;
+    color: white;
+    padding: 1.5rem;
+    font-size: 1.5rem;
+    width: 25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    margin-bottom: 3rem;
+    border-radius: 0.5rem;
+  }
+
+.signin:hover {
+    background: #4438e6;
+}
