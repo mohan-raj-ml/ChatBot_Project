@@ -16,6 +16,8 @@ import { values } from "../../node_modules/@mui/system/esm/breakpoints";
 import { Outlet } from "react-router-dom";
 import { Link } from "react-router-dom";
 import CustomizedDialogs from "../Components/AddDialog";
+import StorageIcon from '@mui/icons-material/Storage';
+
 
 const Dashboard = () => {
   const [allDatabaseData, setAllDatabaseData] = useState([]);
@@ -108,8 +110,9 @@ const Dashboard = () => {
                 )}&u=${encodeURIComponent(database.username)}&id=${encodeURIComponent(database.id)}`}
               >
                 <button key={database.dbname} className="query">
-                  <img src={msgIcon} alt="Query" />
-                  {database.dbname}
+                  {/* <img src={msgIcon} alt="Query" /> */}
+                  <StorageIcon sx={{fontSize: 20}}/>
+                  <h1 className="text-[14px] pl-5">{database.dbname}</h1>
                 </button>
               </Link>
             ))}

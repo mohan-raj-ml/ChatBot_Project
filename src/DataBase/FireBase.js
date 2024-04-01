@@ -17,9 +17,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-
 const provider = new GoogleAuthProvider();
-
 
 
 export const SignInWithGoogle = () => {
@@ -33,14 +31,13 @@ export const SignInWithGoogle = () => {
           localStorage.setItem("name", name);
           localStorage.setItem("email", email);
           localStorage.setItem("photoURL", photoURL);
-  
-          resolve(result); // Resolve the promise with the result
+          resolve(result); 
         })
         .catch((error) => {
           console.log(error);
-          reject(error); // Reject the promise with the error
+          reject(error); 
         });
     });
-  };
+ };
   
   

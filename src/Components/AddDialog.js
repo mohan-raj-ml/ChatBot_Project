@@ -1,7 +1,6 @@
-import React, { useState } from 'react'; // Add import for useState
+import React, { useState } from 'react';
 import { auth, db } from "../DataBase/FireBase";
 import { addDoc, collection , updateDoc } from "firebase/firestore";
-
 import Button from '@mui/material/Button';
 import { styled } from '@mui/material/styles';
 import Dialog from '@mui/material/Dialog';
@@ -9,9 +8,11 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogActions from '@mui/material/DialogActions';
 import IconButton from '@mui/material/IconButton';
 import CloseIcon from '@mui/icons-material/Close';
-import Typography from '@mui/material/Typography';
 import { DialogContent, TextField } from '@mui/material';
 import addBtn from "../assets/add-30.png";
+
+
+
 
 const BootstrapDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiDialogContent-root': {
@@ -23,44 +24,38 @@ const BootstrapDialog = styled(Dialog)(({ theme }) => ({
 }));
 
 const CustomizedDialogs = () => {
-  const [open, setOpen] = useState(false); // Declare useState hook
-  const [userName, setUserName] = useState('');
-  const [password, setPassword] = useState('');
-  const [databaseName, setDatabaseName] = useState('');
+const [open, setOpen] = useState(false); // Declare useState hook
+const [userName, setUserName] = useState('');
+const [password, setPassword] = useState('');
+const [databaseName, setDatabaseName] = useState('');
 
-  const handleClickOpen = () => {
+const handleClickOpen = () => {
     setOpen(true);
-  };
+};
 
   const handleClose = () => {
     setOpen(false);
   };
 
+
   const handleAddDatabase = async () => {
     try {
       const user = auth.currentUser;
-
       if (user) {
-        // Get the current user ID (replace this with your authentication logic)
         const userId = user.uid;
-
-        // Add the database data to Firestore
         const userCollection = collection(db, `users/${userId}/DatabaseData`);
-
         const docRef = await addDoc(userCollection, {
           username: userName,
           password: password,
           dbname: databaseName,
-          
         });
+
         const docId = docRef.id;
         await updateDoc(docRef, { id: docId });
-        // Clear the input fields
         setUserName('');
         setPassword('');
         setDatabaseName('');
 
-        // Close the dialog
         setOpen(false);
       } else {
         console.error("User not authenticated.");
