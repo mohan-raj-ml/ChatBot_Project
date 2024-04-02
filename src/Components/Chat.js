@@ -154,6 +154,12 @@ const Chat = () => {
     setMessageData();
     
   },[id])
+  useEffect(()=>{
+    
+    getMessageData();
+   
+    
+  },[typedValue])
 
 
 
