@@ -5,6 +5,7 @@ import gptImgLogo from "../assets/chatgptLogo.svg";
 import { Form, useSearchParams } from "react-router-dom";
 import { useState } from "react";
 import { auth, db } from "../DataBase/FireBase";
+import MicIcon from '@mui/icons-material/Mic';
 import {
   collection,
   query,
@@ -162,12 +163,23 @@ const Chat = () => {
   },[typedValue])
 
 
-
+  const handleVoiceToText = () => {
+    const recognition = new window.webkitSpeechRecognition(); // Initialize speech recognition
+    recognition.lang = 'en-US'; // Set recognition language
+    
+    recognition.onresult = (event) => {
+    
+      const speechToText = event.results[0][0].transcript; // Get the recognized text
+      setTypedValue(speechToText); // Set the recognized text into the input field
+    };
+    recognition.start(); // Start speech recognition
+    setTypedValue("Listening...")
+  };
 
 
   return (
     <div>
-        <h1 className="text-[20px]"> Database Name :  {dbName} </h1>
+       
 <div className="chats overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
 {
   MessageData && MessageData.length > 0 ? (
@@ -180,6 +192,7 @@ const Chat = () => {
             message.message
           ) : (
             <>
+            <h1 className="py-5">{message.message}</h1>
               {message.result ? (
                <table className="w-full border-collapse border border-gray-200">
                <thead>
@@ -215,17 +228,21 @@ const Chat = () => {
 </div>
 
       <div className="chatFooter">
-        <div className="inp">
-          <input
-            type="text"
-            placeholder="Send a Message..."
-            value={typedValue}
-            onChange={handleInputChange}
-          />
-          <button className="send" onClick={handleButtonClick}>
-            <img src={sendBtn} alt="Send" />
-          </button>
-        </div>
+      <div className="inp">
+      <button className="send pl-5" onClick={handleVoiceToText}>
+        <MicIcon sx={{ fontSize: 20 }} />
+      </button>
+      <input
+       className="text-[14px]"
+        type="text"
+        placeholder="Send a Message..."
+        value={typedValue}
+        onChange={handleInputChange}
+      />
+      <button className="send p-5" onClick={handleButtonClick}>
+        <img src={sendBtn} alt="Send" />
+      </button>
+    </div>
         <p>
           ChatBot may produce incorrect information about the query being asked.{" "}
         </p>

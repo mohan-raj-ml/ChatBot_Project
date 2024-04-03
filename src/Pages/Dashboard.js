@@ -91,6 +91,12 @@ const Dashboard = () => {
     }
   };
 
+  const [clickedButton, setClickedButton] = useState(null);
+
+  const handleClick = (dbName) => {
+    setClickedButton(dbName);
+  };
+
   return userStatus ? (
     <div className="App">
       <div className="sideBar">
@@ -101,21 +107,23 @@ const Dashboard = () => {
           </div>
          <CustomizedDialogs/>
           <div className="upperSideBottom">
-            {allDatabaseData.map((database) => (
-              <Link
-                to={`/dashboard/chat?v=${encodeURIComponent(
-                  database.dbname
-                )}&p=${encodeURIComponent(
-                  database.password
-                )}&u=${encodeURIComponent(database.username)}&id=${encodeURIComponent(database.id)}`}
-              >
-                <button key={database.dbname} className="query">
-                  {/* <img src={msgIcon} alt="Query" /> */}
-                  <StorageIcon sx={{fontSize: 20}}/>
-                  <h1 className="text-[14px] pl-5">{database.dbname}</h1>
-                </button>
-              </Link>
-            ))}
+          
+      {allDatabaseData.map((database) => (
+        <Link
+          key={database.dbname}
+          to={`/dashboard/chat?v=${encodeURIComponent(database.dbname)}&p=${encodeURIComponent(database.password)}&u=${encodeURIComponent(database.username)}&id=${encodeURIComponent(database.id)}`}
+        >
+          <button 
+            className={`query ${clickedButton === database.dbname ? 'bg-blue-900' : ''}`} // Apply 'solid' class if the button is clicked
+            onClick={() => handleClick(database.dbname)}
+          >
+            {/* <img src={msgIcon} alt="Query" /> */}
+            <StorageIcon sx={{fontSize: 20}}/>
+            <h1 className="text-[14px] pl-5">{database.dbname}</h1>
+          </button>
+        </Link>
+      ))}
+    
           </div>
         </div>
 
