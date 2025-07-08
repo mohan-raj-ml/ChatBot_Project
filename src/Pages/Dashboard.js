@@ -1,129 +1,67 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+import Chat from "../Components/Chat";
 import gptLogo from "../assets/chatgpt.svg";
-import addBtn from "../assets/add-30.png";
-import msgIcon from "../assets/message.svg";
+import StorageIcon from "@mui/icons-material/Storage";
 import home from "../assets/home.svg";
 import saved from "../assets/bookmark.svg";
 import rocket from "../assets/rocket.svg";
-import Chat from "../Components/Chat";
-import Home from "./Home";
 import CloseIcon from "@mui/icons-material/Close";
-import { useNavigate } from "react-router-dom";
-import { auth, db } from "../DataBase/FireBase";
-import { addDoc, collection, orderBy, getDocs } from "firebase/firestore";
-import ListCard from "../Components/ListCard";
-import { values } from "../../node_modules/@mui/system/esm/breakpoints";
-import { Outlet } from "react-router-dom";
-import { Link } from "react-router-dom";
-import CustomizedDialogs from "../Components/AddDialog";
-import StorageIcon from '@mui/icons-material/Storage';
-
 
 const Dashboard = () => {
-  const [allDatabaseData, setAllDatabaseData] = useState([]);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userStatus, setUserStatus] = useState(false);
-  const displayName = localStorage.getItem("name");
-  const photoURL = localStorage.getItem("photoURL");
-  const email = localStorage.getItem("email");
-
+  const [models, setModels] = useState([]);
+  const [selectedModel, setSelectedModel] = useState("");
+  const [clicked, setClicked] = useState("demo");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const toggleDropdown = () => {
-    setIsDropdownOpen(!isDropdownOpen);
-  };
-  const closeDropdown = () => {
-    setIsDropdownOpen(false);
-  };
-  const navigate = useNavigate();
-  const handelLogOut = () => {
-    localStorage.clear();
-    navigate("/");
-  };
+
+  const displayName = "John Doe";
+  const photoURL = "https://api.dicebear.com/7.x/initials/svg?seed=JD";
 
   useEffect(() => {
-    const loggedInUser = localStorage.getItem("name");
-    if (loggedInUser) {
-      setUserStatus(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
-        setIsAuthenticated(true);
-        getDatabaseData();
-      } else {
-        setIsAuthenticated(false);
-      }
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
-
-  const getDatabaseData = async () => {
-    try {
-      const user = auth.currentUser;
-      if (user) {
-        const userId = user.uid;
-        const userCollectionDatabaseData = collection(
-          db,
-          `users/${userId}/DatabaseData`
-        );
-        const querySnapshotLeetcode = await getDocs(userCollectionDatabaseData);
-
-        const allDatabaseData = [];
-
-        querySnapshotLeetcode.forEach((doc) => {
-          allDatabaseData.push(doc.data());
-        });
-
-        if (allDatabaseData.length > 0) {
-          console.log(allDatabaseData);
-          setAllDatabaseData(allDatabaseData);
+    axios.get("http://localhost:3001/models")
+      .then(res => {
+        setModels(res.data);
+        if (res.data.length > 0) {
+          setSelectedModel(res.data[0]);
         }
-      } else {
-        console.error("User not authenticated.");
-      }
-    } catch (e) {
-      console.error("Error in fetching LeetCode data", e);
-    }
-  };
+      })
+      .catch(err => {
+        console.error("Error fetching models:", err);
+        setModels([]);
+      });
+  }, []);
 
-  const [clickedButton, setClickedButton] = useState(null);
-
-  const handleClick = (dbName) => {
-    setClickedButton(dbName);
-  };
-
-  return userStatus ? (
+  return (
     <div className="App">
+      {/* ---------- SIDEBAR ---------- */}
       <div className="sideBar">
         <div className="upperSide">
           <div className="upperSideTop">
             <img src={gptLogo} alt="Logo" className="logo" />
-            <span className="brand">SQL Bot</span>
+            <span className="brand">Chat Bot</span>
           </div>
-         <CustomizedDialogs/>
-          <div className="upperSideBottom">
-          
-      {allDatabaseData.map((database) => (
-        <Link
-          key={database.dbname}
-          to={`/dashboard/chat?v=${encodeURIComponent(database.dbname)}&p=${encodeURIComponent(database.password)}&u=${encodeURIComponent(database.username)}&id=${encodeURIComponent(database.id)}`}
-        >
-          <button 
-            className={`query ${clickedButton === database.dbname ? 'bg-blue-900' : ''}`} // Apply 'solid' class if the button is clicked
-            onClick={() => handleClick(database.dbname)}
+
+          {/* Model Dropdown replaces Add DB */}
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            className="midBtn"
           >
-            {/* <img src={msgIcon} alt="Query" /> */}
-            <StorageIcon sx={{fontSize: 20}}/>
-            <h1 className="text-[14px] pl-5">{database.dbname}</h1>
-          </button>
-        </Link>
-      ))}
-    
+            {models.map((model, idx) => (
+              <option key={idx} value={model}>
+                {model}
+              </option>
+            ))}
+          </select>
+
+          <div className="upperSideBottom">
+            <button
+              className={`query ${clicked === "demo" ? "bg-blue-900" : ""}`}
+              onClick={() => setClicked("demo")}
+            >
+              <StorageIcon sx={{ fontSize: 20 }} />
+              <h1 className="text-[14px] pl-5">Demo DB</h1>
+            </button>
           </div>
         </div>
 
@@ -140,54 +78,39 @@ const Dashboard = () => {
             <img src={rocket} alt="Upgrade" className="listitemsImg" />
             Upgrade to Pro
           </div>
-          <button type="button" onClick={toggleDropdown}>
+          <button onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
             <div className="listItems">
               <img
                 src={photoURL}
-                alt="Upgrade"
+                alt="User"
                 className="w-20 h-20 rounded-full cursor-pointer p-2 mr-3"
-              />{" "}
+              />
               {displayName}
             </div>
           </button>
 
-          <div className="relative inline-block text-left pl-3">
-            {isDropdownOpen && (
-              <div
-                id="userDropdown"
-                className="z-20 absolute right-0  shadow-lg bg-indigo-50 rounded-lg shadow w-[250px] bottom-full "
-                onClick={closeDropdown}
-              >
-                <div className="text-end p-1 pr-2">
-                  <button>
-                    <CloseIcon sx={{ color: "black" }} />
-                  </button>
-                </div>
-
-                <div className="py-1 text-lg text-black">
-                  <a
-                    href="#"
-                    className="block px-4 py-2 hover:bg-indigo-200 "
-                    onClick={() => {
-                      handelLogOut();
-                    }}
-                  >
-                    Sign out
-                  </a>
-                </div>
+          {isDropdownOpen && (
+            <div className="z-20 absolute shadow-lg bg-indigo-50 rounded-lg w-[250px]">
+              <div className="text-end p-1 pr-2">
+                <button onClick={() => setIsDropdownOpen(false)}>
+                  <CloseIcon sx={{ color: "black" }} />
+                </button>
               </div>
-            )}
-          </div>
+              <div className="py-1 text-lg text-black">
+                <a href="#" className="block px-4 py-2 hover:bg-indigo-200">
+                  Sign out
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-      <div className="main">
-        <Outlet />
-      </div>
 
-      {/* <Chat/> */}
+      {/* ---------- MAIN ---------- */}
+      <div className="main">
+        <Chat selectedModel={selectedModel} />
+      </div>
     </div>
-  ) : (
-    <Home />
   );
 };
 
