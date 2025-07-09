@@ -29,42 +29,82 @@ def init_db():
         with open('schema.sql', 'r') as f:
             db.executescript(f.read())
 
-@app.route('/signup', methods=['GET', 'POST'])
+@app.route('/signup', methods=['POST'])
 def signup():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        db = get_db()
-        try:
-            db.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
-            db.commit()
-            flash('Signup successful! Please login.')
-            return redirect(url_for('login'))
-        except sqlite3.IntegrityError:
-            flash('Username already exists.')
-    return render_template('signup.html')
+    # Support both form data and JSON
+    if request.is_json:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+    else:
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
 
-@app.route('/login', methods=['GET', 'POST'])
+    if not username or not password:
+        return jsonify({"success": False, "message": "Username and password required."}), 400
+
+    db = get_db()
+    try:
+        db.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
+        db.commit()
+        return jsonify({"success": True, "message": "Signup successful."})
+    except sqlite3.IntegrityError:
+        return jsonify({"success": False, "message": "Username already exists."}), 409
+######
+# response of the api is 
+# {                                      |  {
+#   "success": true,                     |        "success": false,
+#   "message": "Signup successful."      |         "message": "Username already exists." 
+# }                                      |  }
+# Post payload example {username: "testuser", password: "testpass"} 
+######
+
+
+@app.route('/login', methods=['POST'])
 def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        db = get_db()
-        user = db.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password)).fetchone()
-        if user:
-            session.permanent = True
-            session['user'] = username
-            return redirect(url_for('index'))
-        else:
-            flash('Invalid credentials.')
-    return render_template('login.html')
+    # Accept both JSON and form-encoded
+    if request.is_json:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+    else:
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
 
-@app.route('/logout')
+    if not username or not password:
+        return jsonify({"success": False, "message": "Username and password required."}), 400
+
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password)).fetchone()
+    
+    if user:
+        session.permanent = True
+        session['user'] = username
+        return jsonify({"success": True, "message": "Login successful."})
+    else:
+        return jsonify({"success": False, "message": "Invalid credentials."}), 401
+######
+# response of the api is
+# {                                      |  {
+#   "success": true,                     |        "success": false,
+#   "message": "Login successful."       |         "message": "Invalid credentials."
+# }                                      |  }
+# Post payload example {username: "testuser", password: "testpass"}
+# If the user is logged in, it will return success true and message Login successful
+######
+
+@app.route('/logout', methods=['POST'])
 def logout():
     session.pop('user', None)
-    flash('Logged out.')
-    return redirect(url_for('login'))
-
+    return jsonify({"success": True, "message": "Logged out successfully."})
+######
+# response of the api is 
+# {                                        
+#   "success": true,                            
+#   "message": "Logged out successfully."         
+# }                                        
+# Post payload no data required
+######
 @app.route('/')
 def index():
     if 'user' not in session:
