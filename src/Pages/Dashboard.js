@@ -1,40 +1,86 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import Chat from "../Components/Chat";
 import gptLogo from "../assets/chatgpt.svg";
-import StorageIcon from "@mui/icons-material/Storage";
 import home from "../assets/home.svg";
 import saved from "../assets/bookmark.svg";
-import rocket from "../assets/rocket.svg";
-import CloseIcon from "@mui/icons-material/Close";
+import LogoutIcon from "@mui/icons-material/Logout";
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+  const user = JSON.parse(localStorage.getItem("user"));
+  const displayName = user?.username || "Guest";
+  const photoURL = `https://api.dicebear.com/7.x/initials/svg?seed=${displayName}`;
+
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
-  const [clicked, setClicked] = useState("chat");
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-
-  const displayName = "John Doe";
-  const photoURL = "https://api.dicebear.com/7.x/initials/svg?seed=JD";
+  const [selectedChatId, setSelectedChatId] = useState(null);
 
   useEffect(() => {
     axios
-      .get("http://localhost:3001/models")
+      .get("http://localhost:5000/api/get_models", { withCredentials: true })
       .then((res) => {
-        setModels(res.data);
-        if (res.data.length > 0) {
-          setSelectedModel(res.data[0]);
-        }
+        const modelList = res.data.response[0] || [];
+        setModels(modelList);
+        if (modelList.length > 0) setSelectedModel(modelList[0]);
       })
       .catch((err) => {
         console.error("Error fetching models:", err);
         setModels([]);
       });
+
+    axios
+      .get("http://localhost:5000/api/list_chats", { withCredentials: true })
+      .then((res) => {
+        setChatHistory(res.data.chats || []);
+      })
+      .catch((err) => console.error("Error loading chat history:", err));
   }, []);
 
+  const handleNewChat = async () => {
+    try {
+      const res = await axios.post(
+        "http://localhost:5000/api/create_chat",
+        { title: "New Chat" },
+        { withCredentials: true }
+      );
+      const newChat = {
+        id: res.data.chat_id,
+        title: res.data.title,
+        created_at: new Date().toISOString(),
+      };
+      setChatHistory((prev) => [newChat, ...prev]);
+      setSelectedChatId(newChat.id);
+    } catch (err) {
+      console.error("Failed to start new chat:", err);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await axios.post("http://localhost:5000/logout", {}, { withCredentials: true });
+      localStorage.removeItem("user");
+      navigate("/");
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
+  };
+
   return (
-    <div className="App">
+    <div className="App relative">
+      {/* ---------- GLOBAL LOGOUT BUTTON ---------- */}
+      <div className="absolute top-4 right-4 z-50">
+        <button
+          onClick={handleLogout}
+          className="listItems flex items-center bg-transparent text-white border border-gray-600 rounded px-4 py-2 hover:bg-indigo-600 transition"
+        >
+          <LogoutIcon className="mr-2" />
+          Logout
+        </button>
+      </div>
+
       {/* ---------- SIDEBAR ---------- */}
       <div className="sideBar">
         <div className="upperSide">
@@ -43,13 +89,16 @@ const Dashboard = () => {
             <span className="brand">DevBot</span>
           </div>
 
-          {/* Model Dropdown */}
           <select
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
-            className="midBtn"
+            className="midBtn mb-2"
           >
-            <option value="">Select Model</option>
+            {selectedModel === "" && (
+              <option value="" disabled hidden>
+                Select Model
+              </option>
+            )}
             {models.map((model, idx) => (
               <option key={idx} value={model}>
                 {model}
@@ -57,18 +106,25 @@ const Dashboard = () => {
             ))}
           </select>
 
-          {/* Conversation History */}
-          <div className="mt-5 px-2 text-white">
-            <h2 className="text-sm font-semibold mb-2">Conversation History</h2>
-            <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+          <button className="chat_bt mb-4" onClick={handleNewChat}>
+            New chat
+          </button>
+
+          <div className="mt-2 px-2 text-white">
+            <h2 className="text-sm p-5 font-semibold mb-2">Conversation History</h2>
+            <div className="flex flex-col gap-2 max-h-60 overflow-y-auto scrollbar-hide">
               {chatHistory.length === 0 ? (
-                <p className="text-xs text-gray-400">No messages yet</p>
+                <p className="text-sm text-gray-400">No messages yet</p>
               ) : (
-                chatHistory.map((item, index) => (
-                  <div key={index} className="text-xs bg-gray-700 p-2 rounded">
-                    <strong>You:</strong> {item.user}
-                    <br />
-                    <strong>Bot:</strong> {item.bot}
+                chatHistory.map((conv, index) => (
+                  <div
+                    key={conv.id}
+                    onClick={() => setSelectedChatId(conv.id)}
+                    className={`text-base p-2 rounded cursor-pointer ${
+                      selectedChatId === conv.id ? "border border-white" : ""
+                    }`}
+                  >
+                    {conv.title || `Conversation ${index + 1}`}
                   </div>
                 ))
               )}
@@ -76,7 +132,6 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Lower Side */}
         <div className="lowerSide">
           <div className="listItems">
             <img src={home} alt="Home" className="listitemsImg" />
@@ -87,31 +142,14 @@ const Dashboard = () => {
             Saved
           </div>
 
-          <button onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
-            <div className="listItems">
-              <img
-                src={photoURL}
-                alt="User"
-                className="w-20 h-20 rounded-full cursor-pointer p-2 mr-3"
-              />
-              {displayName}
-            </div>
-          </button>
-
-          {isDropdownOpen && (
-            <div className="z-20 absolute shadow-lg bg-indigo-50 rounded-lg w-[250px]">
-              <div className="text-end p-1 pr-2">
-                <button onClick={() => setIsDropdownOpen(false)}>
-                  <CloseIcon sx={{ color: "black" }} />
-                </button>
-              </div>
-              <div className="py-1 text-lg text-black">
-                <a href="#" className="block px-4 py-2 hover:bg-indigo-200">
-                  Sign out
-                </a>
-              </div>
-            </div>
-          )}
+          <div className="listItems">
+            <img
+              src={photoURL}
+              alt="User"
+              className="w-20 h-20 rounded-full cursor-pointer p-2 mr-3"
+            />
+            {displayName}
+          </div>
         </div>
       </div>
 
@@ -120,6 +158,8 @@ const Dashboard = () => {
         <Chat
           selectedModel={selectedModel}
           setChatHistory={setChatHistory}
+          selectedChatId={selectedChatId}
+          setSelectedChatId={setSelectedChatId}
         />
       </div>
     </div>

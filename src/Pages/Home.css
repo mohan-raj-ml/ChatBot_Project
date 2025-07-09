@@ -98,3 +98,54 @@ body {
     background: #4438e6;
 }
 
+.Home {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: rgb(3, 0, 31);
+  font-family: 'Poppins', sans-serif;
+}
+
+.auth-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 4rem;
+  border-radius: 1rem;
+  box-shadow: 0 0 20px rgba(90, 75, 255, 0.2);
+  width: 100%;
+  max-width: 400px;
+}
+
+.auth-input {
+  background: transparent;
+  border: 2px solid #5A4BFF;
+  color: white;
+  width: 100%;
+  padding: 1.2rem 1.5rem;
+  margin-bottom: 1.5rem;
+  font-size: 1.5rem;
+  border-radius: 0.5rem;
+  outline: none;
+}
+
+.auth-input::placeholder {
+  color: white;
+  opacity: 0.8;
+}
+
+.auth-button {
+  background: #5A4BFF;
+  color: white;
+  width: 100%;
+  padding: 1.2rem;
+  font-size: 1.5rem;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.auth-button:hover {
+  background: #4438e6;
+}

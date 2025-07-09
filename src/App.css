@@ -166,7 +166,7 @@ html, body {
   width: 3.5rem;
   margin-right: 2rem;
   border-radius: 0.5rem;
-
+  height: 2.5rem;
 }
 
 .chatFooter {
@@ -209,17 +209,7 @@ html, body {
 @tailwind components;
 @tailwind utilities;
 
-select.midBtn {
-  background: #5A4BFF;
-  color: white;
-  font-size: 1.5rem;
-  border: none;
-  padding: 1.5rem;
-  border-radius: 0.5rem;
-  width: 25rem;
-  text-align: center;
-  appearance: auto; /* ✅ brings back dropdown arrow */
-}
+
 
 .chatBox {
   width: 100%;
@@ -295,3 +285,44 @@ select.midBtn {
   display: none;                   /* Chrome, Safari, Opera */
 }
 
+/* button.chat_bt{
+  font-size: 1rem;
+  border: none;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  width: 25rem;
+  height: 3rem;
+  background: #5A4BFF;
+  color: white;
+  margin: 0%;
+}*/
+
+/*select.midBtn {
+  background: #5A4BFF;
+  color: white;
+  font-size: 1rem;
+  border: none;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  width: 25rem;
+  height: 3rem;
+  text-align: center;
+  appearance: auto; 
+} */
+
+select.midBtn,
+button.chat_bt {
+  display: block;
+  width: 100%;
+  max-width: 25rem;
+  height: 3rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #5A4BFF;
+  color: white;
+  text-align: center;
+  appearance: auto;
+  margin: 0 auto 1rem auto;
+}
