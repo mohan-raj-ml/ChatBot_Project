@@ -2,7 +2,12 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import gptImgLogo from "../assets/chatgptLogo.svg";
 
-const Chat = ({ selectedModel, setChatHistory, selectedChatId, setSelectedChatId }) => {
+const Chat = ({
+  selectedModel,
+  setChatHistory,
+  selectedChatId,
+  setSelectedChatId,
+}) => {
   const [typedValue, setTypedValue] = useState("");
   const [messageData, setMessageData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -12,17 +17,23 @@ const Chat = ({ selectedModel, setChatHistory, selectedChatId, setSelectedChatId
   const username = user?.username || "Guest";
   const userAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${username}`;
 
+  // Scroll to bottom anytime messages or loading changes
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const timeout = setTimeout(() => {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
+    return () => clearTimeout(timeout);
   }, [messageData, loading]);
 
+  // Load chat history when switching conversations
   useEffect(() => {
     const loadChatHistory = async () => {
       if (!selectedChatId) return;
       try {
-        const res = await axios.get(`http://localhost:5000/api/chat_history?chat_id=${selectedChatId}`, {
-          withCredentials: true,
-        });
+        const res = await axios.get(
+          `http://localhost:5000/api/chat_history?chat_id=${selectedChatId}`,
+          { withCredentials: true }
+        );
         const formatted = res.data.map((m) => ({
           type: m.role === "user" ? "Sender" : "Receiver",
           message: m.content,
@@ -38,6 +49,7 @@ const Chat = ({ selectedModel, setChatHistory, selectedChatId, setSelectedChatId
 
   const handleSubmit = async () => {
     if (!typedValue.trim() || !selectedModel) return;
+
     const userMessage = { type: "Sender", message: typedValue };
     setMessageData((prev) => [...prev, userMessage]);
     setTypedValue("");
@@ -95,7 +107,7 @@ const Chat = ({ selectedModel, setChatHistory, selectedChatId, setSelectedChatId
     <div className="flex flex-col h-full">
       <div
         className="flex-1 overflow-y-auto p-4 scrollbar-hide"
-        style={{ maxHeight: "calc(100vh - 130px)" }}
+        style={{ maxHeight: "calc(100vh - 140px)" }}
       >
         {messageData.map((msg, idx) => (
           <div
@@ -142,8 +154,8 @@ const Chat = ({ selectedModel, setChatHistory, selectedChatId, setSelectedChatId
         <div ref={chatEndRef} />
       </div>
 
-      <div className="chatFooter p-4">
-        <div className="inp flex items-end bg-[#1c1e3a] rounded px-3 py-2 w-full max-w-[68rem]">
+      <div className="chatFooter p-10 pb-20">
+        <div className="inp flex items-end bg-[#1c1e3a] rounded px-3 py-2 w-full max-w-[68rem] mx-auto">
           <textarea
             rows={1}
             className="resize-none w-full bg-transparent text-white outline-none max-h-40 text-sm overflow-y-auto scrollbar-hide"
@@ -153,7 +165,8 @@ const Chat = ({ selectedModel, setChatHistory, selectedChatId, setSelectedChatId
               setTypedValue(e.target.value);
               const textarea = e.target;
               textarea.style.height = "auto";
-              textarea.style.height = Math.min(textarea.scrollHeight, 160) + "px";
+              textarea.style.height =
+                Math.min(textarea.scrollHeight, 160) + "px";
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -162,7 +175,10 @@ const Chat = ({ selectedModel, setChatHistory, selectedChatId, setSelectedChatId
               }
             }}
           />
-          <button className="send text-white text-xl ml-2" onClick={handleSubmit}>
+          <button
+            className="send text-white text-xl ml-2"
+            onClick={handleSubmit}
+          >
             ➤
           </button>
         </div>

@@ -1,112 +1,31 @@
+/* Reset and base */
 * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 html {
-    font-size: 62.5%;
+  font-size: 62.5%;
 }
 
 body {
-    background: rgb(3, 0, 31);
-    color: white;
-    font-family: 'Poppins', sans-serif;
+  background: rgb(3, 0, 31);
+  color: white;
+  font-family: 'Poppins', sans-serif;
+  height: 100vh;
+  overflow: hidden;
 }
 
-.Home {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-}
-
-.middleUpper {
-    text-align: center;
-}
-
-.middleUpper .txt{
-    margin-left: 25rem;
-    margin-right: 25rem;
-    padding: 3rem;
-    font-size: 2.2rem; /* Increased font size */
-    display: flex;
-    align-items: flex-start;
-    text-align: center;
-    font-weight: bold; /* Making text bold */
-}
-
-.middleTop {
-    margin-bottom: 2rem;
-}
-
-.gptLogo {
-    width: 80px;
-    height: 80px;
-    margin-right: 10px;
-}
-
-.brand {
-    font-size: 3rem;
-    font-weight: bold;
-}
-
-.txt {
-    margin-bottom: 2rem;
-    font-size: 1.8rem; /* Increased font size */
-    line-height: 1.6;
-}
-
-.middleBottom {
-    margin-top: 2rem;
-    text-align: center;
-}
-
-.middleBottom p {
-    font-size: 20px;
-    margin-bottom: 15px;
-    font-weight: bold; /* Making text bold */
-}
-
-.buttons {
-    margin-top: 4rem;
-    text-decoration: none;
-}
-
-.addBtn {
-    height: 2rem;
-    padding-right: 1rem;
-  }
-  
-  .midBtn {
-    background: #5A4BFF;
-    border: none;
-    color: white;
-    padding: 1.5rem;
-    font-size: 1.5rem;
-    width: 25rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto;
-    margin-bottom: 3rem;
-    border-radius: 0.5rem;
-  }
-
-.signin:hover {
-    background: #4438e6;
-}
-
+/* Centered Auth Layout */
 .Home {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background: rgb(3, 0, 31);
-  font-family: 'Poppins', sans-serif;
 }
 
+/* Card Styling */
 .auth-card {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -115,8 +34,10 @@ body {
   box-shadow: 0 0 20px rgba(90, 75, 255, 0.2);
   width: 100%;
   max-width: 400px;
+  text-align: center;
 }
 
+/* Inputs */
 .auth-input {
   background: transparent;
   border: 2px solid #5A4BFF;
@@ -134,6 +55,7 @@ body {
   opacity: 0.8;
 }
 
+/* Button */
 .auth-button {
   background: #5A4BFF;
   color: white;
@@ -148,4 +70,28 @@ body {
 
 .auth-button:hover {
   background: #4438e6;
+}
+
+/* Toggle Text */
+.auth-toggle-text {
+  font-size: 1.4rem;
+  margin-top: 2rem;
+  color: #ccc;
+}
+
+.auth-toggle-text span {
+  color: #7f9cf5;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.auth-toggle-text span:hover {
+  color: #aabfff;
+}
+
+/* Error Message */
+.error-msg {
+  color: #fefefe;
+  margin-top: 1rem;
+  font-size: 1.3rem;
 }

@@ -64,6 +64,8 @@ html, body {
   display: flex;
   align-items: center;
   margin: 2.5rem;
+  margin-top: 0;
+  margin-left: 2rem;
 }
 
 .addBtn {
@@ -109,11 +111,15 @@ html, body {
 }
 
 .listItems {
-  margin: 1rem;
   display: flex;
   align-items: center;
   font-size: 1.3rem;
+  margin: 1.5rem 0;
+  gap: 1rem;
+  color: white;
+  padding-left: 2rem;
 }
+
 
 .listitemsImg {
   margin: 1rem;
@@ -179,14 +185,13 @@ html, body {
 }
 
 .inp {
-  padding: 0.5rem;
-  background: rgba(28,30,58,1);
+  padding: 1rem 1.25rem; /* ✅ More inner spacing */
+  min-height: 5rem;      /* ✅ Taller typing area */
+  background: rgba(28, 30, 58, 1);
   display: flex;
   align-items: center;
   border-radius: 0.5rem;
-  border-bottom: 5rem;
   width: 68rem;
-  height:auto
 }
 
 .inp>input {
@@ -194,11 +199,16 @@ html, body {
   outline: none;
   padding: 1.25rem;
   color: white;
+  font-size: medium;
 }
 
 .inp>input, .send {
   background: transparent;
   border: none;
+}
+
+.inp textarea {
+  font-size: small;
 }
 
 .chatFooter>p{

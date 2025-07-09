@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import '../App.css';
-import './Home.css'; // If separated styling is used
+import './Home.css'; // Custom styles for login/signup card
 
 const Home = () => {
   const [isSignup, setIsSignup] = useState(false);
@@ -65,39 +65,24 @@ const Home = () => {
           onChange={(e) => setPassword(e.target.value)}
         />
 
-        <button
-          onClick={handleAuth}
-          className="auth-button"
-        >
+        <button onClick={handleAuth} className="auth-button">
           {isSignup ? "Sign Up" : "Login"}
         </button>
 
-        {error && <p className="text-red-400 mt-4 text-center">{error}</p>}
+        {error && <p className="error-msg">{error}</p>}
 
-        <p className="text-sm text-gray-300 mt-6 text-center">
+        <p className="auth-toggle-text">
           {isSignup ? (
             <>
               Already have an account?{" "}
-              <span
-                className="text-indigo-400 underline cursor-pointer"
-                onClick={() => {
-                  setIsSignup(false);
-                  setError("");
-                }}
-              >
+              <span onClick={() => { setIsSignup(false); setError(""); }}>
                 Login
               </span>
             </>
           ) : (
             <>
-              Don't have an account?{" "}
-              <span
-                className="text-indigo-400 underline cursor-pointer"
-                onClick={() => {
-                  setIsSignup(true);
-                  setError("");
-                }}
-              >
+              Don’t have an account?{" "}
+              <span onClick={() => { setIsSignup(true); setError(""); }}>
                 Sign up
               </span>
             </>

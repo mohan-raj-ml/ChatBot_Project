@@ -109,27 +109,27 @@ const Dashboard = () => {
           <button className="chat_bt mb-4" onClick={handleNewChat}>
             New chat
           </button>
-
-          <div className="mt-2 px-2 text-white">
-            <h2 className="text-sm p-5 font-semibold mb-2">Conversation History</h2>
-            <div className="flex flex-col gap-2 max-h-60 overflow-y-auto scrollbar-hide">
+          
+          <div className="mt-16 px-2 text-white">
+             <h2 className="text-xl p-5 font-bold mb-2 ">Conversation History</h2>
+              <div className="flex flex-col gap-2 max-h-60 overflow-y-auto scrollbar-hide">
               {chatHistory.length === 0 ? (
-                <p className="text-sm text-gray-400">No messages yet</p>
+              <p className="text-sm text-gray-400">No messages yet</p>
               ) : (
-                chatHistory.map((conv, index) => (
-                  <div
-                    key={conv.id}
-                    onClick={() => setSelectedChatId(conv.id)}
-                    className={`text-base p-2 rounded cursor-pointer ${
-                      selectedChatId === conv.id ? "border border-white" : ""
-                    }`}
-                  >
-                    {conv.title || `Conversation ${index + 1}`}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+              chatHistory.map((conv, index) => (
+             <div
+            key={conv.id}
+            onClick={() => setSelectedChatId(conv.id)}
+            className={`text-lg p-2 rounded cursor-pointer ${
+            selectedChatId === conv.id ? "border border-white" : ""
+          }`}
+          >
+          {conv.title || `Conversation ${index + 1}`}
+              </div>
+            ))
+            )}
+        </div>
+        </div>
         </div>
 
         <div className="lowerSide">
