@@ -15,10 +15,27 @@ body {
   font-family: 'Poppins', sans-serif;
 }
 
-.App{
-  min-height: 100vh;
+/* .App {
+  height: 100vh;        
   display: flex;
+  flex-direction: row; 
+} */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden; /* Prevent scroll on entire page */
 }
+
+.App {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;       /* Prevent scroll inside App */
+  display: flex;
+  flex-direction: row;    /* Side-by-side layout */
+}
+
 
 .sideBar{
   flex: 3;
@@ -167,7 +184,9 @@ body {
   display: flex;
   align-items: center;
   border-radius: 0.5rem;
+  border-bottom: 5rem;
   width: 68rem;
+  height:auto
 }
 
 .inp>input {
@@ -265,3 +284,14 @@ select.midBtn {
   font-size: 1.8rem;
   cursor: pointer;
 }
+
+/* Hide scrollbar but keep scroll functionality */
+.scrollbar-hide {
+  scrollbar-width: none;           /* Firefox */
+  -ms-overflow-style: none;        /* IE/Edge */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;                   /* Chrome, Safari, Opera */
+}
+

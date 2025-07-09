@@ -40,7 +40,7 @@ const Dashboard = () => {
         <div className="upperSide">
           <div className="upperSideTop">
             <img src={gptLogo} alt="Logo" className="logo" />
-            <span className="brand">Chat Bot</span>
+            <span className="brand">DevBot</span>
           </div>
 
           {/* Model Dropdown */}
