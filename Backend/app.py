@@ -10,6 +10,13 @@ app.secret_key = 'secret'
 app.permanent_session_lifetime = timedelta(days=7) #used to save session for number of days
 DB_NAME = 'users.db'
 
+##########################################################################
+### Important Note:
+# use   ##credentials: "include" while calling the api from frontend
+# This is required to maintain the session across different requests
+##########################################################################
+
+
 def get_db():
     if 'db' not in g:
         g.db = sqlite3.connect(DB_NAME, check_same_thread=False)
@@ -50,6 +57,7 @@ def signup():
         return jsonify({"success": True, "message": "Signup successful."})
     except sqlite3.IntegrityError:
         return jsonify({"success": False, "message": "Username already exists."}), 409
+    
 ######
 # response of the api is 
 # {                                      |  {
@@ -268,8 +276,6 @@ def delete_chat():
 # success: true
 # Post payload example {chat_id: 1}
 ######
-
-
 
 
 def post_prompt_to_api(prompt, model):
