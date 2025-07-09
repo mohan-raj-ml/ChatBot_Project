@@ -116,8 +116,19 @@ def logout():
 @app.route('/')
 def index():
     if 'user' not in session:
-        return redirect(url_for('login'))
-    return render_template('index.html')
+        return jsonify({"authenticated": False, "message": "User not logged in"}), 401
+    return jsonify({"authenticated": True, "user": session['user']})
+#######
+# response of the api is
+# {                                      |  {
+#   "authenticated": true,              |        "authenticated": false,
+#   "user": "testuser"                  |         "message": "User not logged in"
+# }                                      |  }
+# Get method no data required
+# If the user is logged in, it will return authenticated true and user as the username
+######
+
+
 
 ##########################################
 
