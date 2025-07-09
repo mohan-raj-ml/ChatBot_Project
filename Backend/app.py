@@ -1,12 +1,14 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session, flash, g
+from flask import Flask, request, jsonify,session, g
 import sqlite3
 import os
 import re
 import requests
 from datetime import timedelta
+from flask_cors import CORS
 
 app = Flask(__name__)
 app.secret_key = 'secret'
+CORS(app, supports_credentials=True)
 app.permanent_session_lifetime = timedelta(days=7) #used to save session for number of days
 DB_NAME = 'users.db'
 
