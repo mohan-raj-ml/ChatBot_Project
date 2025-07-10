@@ -149,6 +149,16 @@ def create_chat(req: ChatRequest, request: Request):
     db.commit()
     return {"success": True, "chat_id": chat_id, "title": req.title}
 
+@app.post("/api/rename_chat")
+def rename_chat(req: RenameChatRequest, request: Request):
+    username = request.session.get("user")
+    if not username:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    db = get_db()
+    db.execute("UPDATE chats SET title = ? WHERE id = ?", (req.new_title, req.chat_id))
+    db.commit()
+    return {"success": True}
+
 @app.post("/api/respond")
 def respond(req: PromptRequest, request: Request):
     username = request.session.get("user")
@@ -163,7 +173,6 @@ def respond(req: PromptRequest, request: Request):
     db.execute("INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)", (req.chat_id, "user", req.prompt))
     db.commit()
 
-    # Build context based on message count
     context = memory_summary.strip() + "\n\n" if memory_summary else ""
 
     if len(messages) == 0:
@@ -184,7 +193,6 @@ def respond(req: PromptRequest, request: Request):
     db.execute("INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)", (req.chat_id, "assistant", response))
     db.commit()
 
-    # Update memory after every 20 exchanges
     if len(messages) % 20 == 0:
         full = ""
         for m in messages:

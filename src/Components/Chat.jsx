@@ -3,6 +3,7 @@ import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import gptImgLogo from "../assets/chatgptLogo.svg";
 import { Mic, Paperclip } from "lucide-react";
+import {  Send } from "lucide-react";
 const Chat = ({
   selectedModel,
   setChatHistory,
@@ -100,91 +101,89 @@ const Chat = ({
   };
   return (
     <div className="flex flex-col h-full">
-      <div
-        className="flex-1 overflow-y-auto p-4 scrollbar-hide"
-        style={{ maxHeight: "calc(100vh - 140px)" }}
-      >
+      {/* Messages Container */}
+      <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-6">
+        {messageData.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-gray-500">
+            <div className="bg-gray-200 dark:bg-gray-700 border-2 border-dashed rounded-xl w-16 h-16 mb-4" />
+            <h3 className="text-lg font-medium">Start a conversation</h3>
+            <p className="text-center max-w-md mt-2">
+              Ask questions, get answers, and explore with DevBot.
+              Type your message below to get started.
+            </p>
+          </div>
+        )}
+
         {messageData.map((msg, idx) => (
           <div
             key={idx}
-            className={`chat flex items-start mb-3 text-[14px] ${
-              msg.type === "Sender" ? "justify-end" : "justify-start"
-            }`}
+            className={`flex ${msg.type === "Sender" ? "justify-end" : "justify-start"}`}
           >
             {msg.type === "Sender" ? (
-              <>
-                <div
-                  className="rounded px-4 py-2 max-w-[75%] break-words whitespace-pre-wrap"
-                  style={{
-                    background: "var(--user-bubble)",
-                    color: "var(--text-color)",
-                  }}
-                >
-                  {msg.message}
-                </div>
+              <div className="flex items-start justify-end max-w-[85%]">
                 <img
                   src={userAvatar}
                   alt="User"
-                  className="w-8 h-8 ml-3 rounded"
+                  className="w-8 h-8 rounded-full ml-2 order-2"
                 />
-              </>
+                  <div className="prose dark:prose-invert text-gray-900 dark:text-white max-w-none text-right bg-indigo-100 dark:bg-gray-700 p-3 rounded-lg">
+                    <ReactMarkdown>{msg.message}</ReactMarkdown>
+                  </div>
+                
+              </div>
             ) : (
-              <>
+              <div className="flex items-start justify-end max-w-[85%]">
                 <img
                   src={gptImgLogo}
                   alt="Bot"
-                  className="w-8 h-8 mr-3 rounded"
+                  className="w-8 h-8 rounded-full mr-2"
                 />
-                <div
-                  className="rounded px-4 py-2 max-w-[75%] overflow-x-auto whitespace-pre-wrap break-words prose"
-                  style={{
-                    background: "var(--bot-bubble)",
-                    color: "var(--text-color)",
-                  }}
-                >
-                  <ReactMarkdown>{msg.message}</ReactMarkdown>
-                </div>
-              </>
+              <div className="prose dark:prose-invert text-gray-900 dark:text-white max-w-none text-left bg-gray-100 dark:bg-gray-800 p-3 rounded-lg">
+  <ReactMarkdown>{msg.message}</ReactMarkdown>
+</div>
+              </div>
             )}
           </div>
         ))}
+
         {loading && (
-          <div className="chat flex items-start text-[14px]">
-            <img src={gptImgLogo} alt="Bot" className="w-8 h-8 mr-3 rounded" />
-            <div
-              className="rounded px-4 py-2 max-w-[75%]"
-              style={{
-                background: "var(--bot-bubble)",
-                color: "var(--text-color)",
-              }}
-            >
-              Thinking...
+          <div className="flex items-end">
+            <img
+              src={gptImgLogo}
+              alt="Bot"
+              className="w-8 h-8 rounded-full mr-2"
+            />
+            <div className="bg-gray-200 dark:bg-gray-700 rounded-r-xl rounded-tl-xl px-4 py-3">
+              <div className="flex space-x-2">
+                <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-100"></div>
+                <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-200"></div>
+              </div>
             </div>
           </div>
         )}
         <div ref={chatEndRef} />
       </div>
-      <div className="chatFooter p-10 pb-20">
-        <div className="inp flex items-end bg-[#1c1e3a] rounded px-3 py-2 w-full max-w-[68rem] mx-auto">
-          {/* Attachment icon */}
-          <button
-            className="text-white mr-4 flex items-center justify-center"
-            title="Attach file"
-          >
-            <Paperclip size={16} />
+
+      {/* Input Area */}
+      <div className="p-4 border-t border-black dark:border-gray-700">
+        <div className="max w-4xl mx-auto">
+        <div className="flex items-end bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 max-w-4xl mx-auto">
+          <button className="p-3 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+            <Paperclip size={20} />
           </button>
-          {/* Textarea */}
-          <textarea
-            rows={1}
-            className="resize-none w-full bg-transparent text-white outline-none max-h-40 text-sm overflow-y-auto scrollbar-hide"
+          
+         <textarea
+  rows={1}
+  className="flex-1 resize-none py-3 px-1 bg-transparent outline-none max-h-32 text-sm text-gray-900 dark:text-white"
+
             placeholder="Send a message..."
             value={typedValue}
             onChange={(e) => {
               setTypedValue(e.target.value);
               const textarea = e.target;
               textarea.style.height = "auto";
-              textarea.style.height =
-                Math.min(textarea.scrollHeight, 160) + "px";
+              textarea.style.height = Math.min(textarea.scrollHeight, 160) + "px";
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -193,23 +192,26 @@ const Chat = ({
               }
             }}
           />
-          {/* Mic + Send icons */}
-          <div className="flex items-center gap-4 ml-4">
-            <button
-              className="text-white flex items-center justify-center"
-              title="Voice input"
-            >
-              <Mic size={16} />
-            </button>
-            <button
-              className="send text-white text-xl"
-              onClick={handleSubmit}
-              title="Send"
-            >
-              ➤
-            </button>
+          
+          <div className="flex p-2">
+            {typedValue ? (
+              <button
+                onClick={handleSubmit}
+                className="p-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700"
+              >
+                <Send size={20} />
+              </button>
+            ) : (
+              <button className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                <Mic size={20} />
+              </button>
+            )}
           </div>
         </div>
+        <p className="text-center text-xs text-gray-500 mt-2">
+          DevBot can make mistakes. Consider checking important information.
+        </p>
+      </div>
       </div>
     </div>
   );

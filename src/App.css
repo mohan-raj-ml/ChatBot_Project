@@ -337,3 +337,12 @@ button.chat_bt {
   margin: 0 auto 1rem auto;
 }
 
+/* Hide scrollbar in WebKit browsers (Chrome, Safari) */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar in Firefox */
+.scrollbar-none {
+  scrollbar-width: none;
+}
