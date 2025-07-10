@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
+import ReactMarkdown from "react-markdown";
 import gptImgLogo from "../assets/chatgptLogo.svg";
 
 const Chat = ({
@@ -58,7 +59,6 @@ const Chat = ({
     try {
       let currentChatId = selectedChatId;
 
-      // Create new chat if one doesn't exist
       if (!currentChatId) {
         const chatRes = await axios.post(
           "http://localhost:5000/api/create_chat",
@@ -68,7 +68,7 @@ const Chat = ({
         currentChatId = chatRes.data.chat_id;
         setSelectedChatId(currentChatId);
 
-        // Refresh sidebar chat history
+        // Refresh chat history in sidebar
         const updatedHistory = await axios.get(
           "http://localhost:5000/api/list_chats",
           { withCredentials: true }
@@ -76,7 +76,6 @@ const Chat = ({
         setChatHistory(updatedHistory.data.chats || []);
       }
 
-      // Send prompt
       await axios.post(
         "http://localhost:5000/api/respond",
         {
@@ -87,7 +86,7 @@ const Chat = ({
         { withCredentials: true }
       );
 
-      // Reload full chat history
+      // Reload updated chat messages
       const res2 = await axios.get(
         `http://localhost:5000/api/chat_history?chat_id=${currentChatId}`,
         { withCredentials: true }
@@ -97,7 +96,7 @@ const Chat = ({
         message: m.content,
       }));
 
-      // ✅ Patch to keep user message already shown in UI
+      // Preserve user message if it's the only one
       if (messageData.length === 1 && messageData[0].type === "Sender") {
         setMessageData([
           messageData[0],
@@ -148,8 +147,8 @@ const Chat = ({
                   alt="Bot"
                   className="w-8 h-8 mr-3 rounded"
                 />
-                <div className="bg-gray-700 text-white rounded px-4 py-2 max-w-[75%] break-words">
-                  {msg.message}
+                <div className="bg-gray-700 text-white rounded px-4 py-2 max-w-[75%] break-words prose prose-invert">
+                  <ReactMarkdown>{msg.message}</ReactMarkdown>
                 </div>
               </>
             )}
