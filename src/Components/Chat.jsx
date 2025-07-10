@@ -68,7 +68,6 @@ const Chat = ({
         currentChatId = chatRes.data.chat_id;
         setSelectedChatId(currentChatId);
 
-        // Refresh chat history in sidebar
         const updatedHistory = await axios.get(
           "http://localhost:5000/api/list_chats",
           { withCredentials: true }
@@ -86,7 +85,6 @@ const Chat = ({
         { withCredentials: true }
       );
 
-      // Reload updated chat messages
       const res2 = await axios.get(
         `http://localhost:5000/api/chat_history?chat_id=${currentChatId}`,
         { withCredentials: true }
@@ -96,7 +94,6 @@ const Chat = ({
         message: m.content,
       }));
 
-      // Preserve user message if it's the only one
       if (messageData.length === 1 && messageData[0].type === "Sender") {
         setMessageData([
           messageData[0],
@@ -131,7 +128,7 @@ const Chat = ({
           >
             {msg.type === "Sender" ? (
               <>
-                <div className="bg-blue-950 text-white rounded px-4 py-2 max-w-[75%] break-words">
+                <div className="bg-blue-950 text-white rounded px-4 py-2 max-w-[75%] break-words whitespace-pre-wrap">
                   {msg.message}
                 </div>
                 <img
@@ -147,7 +144,7 @@ const Chat = ({
                   alt="Bot"
                   className="w-8 h-8 mr-3 rounded"
                 />
-                <div className="bg-gray-700 text-white rounded px-4 py-2 max-w-[75%] break-words prose prose-invert">
+                <div className="bg-gray-700 text-white rounded px-4 py-2 max-w-[75%] overflow-x-auto whitespace-pre-wrap break-words prose prose-invert">
                   <ReactMarkdown>{msg.message}</ReactMarkdown>
                 </div>
               </>
