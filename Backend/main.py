@@ -166,6 +166,10 @@ def respond(req: PromptRequest, request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     db = get_db()
+    user_id = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()["id"]
+    chat_row = db.execute("SELECT title FROM chats WHERE id = ?", (req.chat_id,)).fetchone()
+    chat_title = chat_row["title"] if chat_row else "New Chat"
+
     messages = db.execute("SELECT role, content FROM messages WHERE chat_id = ? ORDER BY timestamp ASC", (req.chat_id,)).fetchall()
     memory_row = db.execute("SELECT memory FROM chat_memory WHERE chat_id = ?", (req.chat_id,)).fetchone()
     memory_summary = memory_row["memory"] if memory_row else ""
@@ -174,7 +178,6 @@ def respond(req: PromptRequest, request: Request):
     db.commit()
 
     context = memory_summary.strip() + "\n\n" if memory_summary else ""
-
     if len(messages) == 0:
         context += f"User: {req.prompt}\nAssistant:"
     elif len(messages) == 1:
@@ -193,10 +196,16 @@ def respond(req: PromptRequest, request: Request):
     db.execute("INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)", (req.chat_id, "assistant", response))
     db.commit()
 
+    if chat_title == "New Chat":
+        title_prompt = PromptTemplate.from_template("Generate a short 3-5 word title for this chat:\n\nUser: {prompt}")
+        title_chain = LLMChain(llm=llm, prompt=title_prompt)
+        generated_title = title_chain.run(prompt=req.prompt).strip().replace("\n", " ")[:50]
+        if generated_title:
+            db.execute("UPDATE chats SET title = ? WHERE id = ?", (generated_title, req.chat_id))
+            db.commit()
+
     if len(messages) % 20 == 0:
-        full = ""
-        for m in messages:
-            full += f"{m['role'].capitalize()}: {m['content']}\n"
+        full = "".join(f"{m['role'].capitalize()}: {m['content']}\n" for m in messages)
         full += f"User: {req.prompt}\nAssistant: {response}"
         summary_prompt = PromptTemplate.from_template("Summarize this conversation for memory:\n\n{context}")
         summary_chain = LLMChain(llm=llm, prompt=summary_prompt)
