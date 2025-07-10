@@ -20,7 +20,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     axios
-      .get("http://localhost:5000/api/get_models", { withCredentials: true })
+      .get("http://localhost:8000/api/get_models", { withCredentials: true })
       .then((res) => {
         const modelList = res.data.response[0] || [];
         setModels(modelList);
@@ -32,7 +32,7 @@ const Dashboard = () => {
       });
 
     axios
-      .get("http://localhost:5000/api/list_chats", { withCredentials: true })
+      .get("http://localhost:8000/api/list_chats", { withCredentials: true })
       .then((res) => {
         setChatHistory(res.data.chats || []);
       })
@@ -42,7 +42,7 @@ const Dashboard = () => {
   const handleNewChat = async () => {
     try {
       const res = await axios.post(
-        "http://localhost:5000/api/create_chat",
+        "http://localhost:8000/api/create_chat",
         { title: "New Chat" },
         { withCredentials: true }
       );
@@ -60,7 +60,7 @@ const Dashboard = () => {
 
   const handleLogout = async () => {
     try {
-      await axios.post("http://localhost:5000/logout", {}, { withCredentials: true });
+      await axios.post("http://localhost:8000/logout", {}, { withCredentials: true });
       localStorage.removeItem("user");
       navigate("/");
     } catch (err) {
@@ -70,7 +70,6 @@ const Dashboard = () => {
 
   return (
     <div className="App relative">
-      {/* ---------- GLOBAL LOGOUT BUTTON ---------- */}
       <div className="absolute top-4 right-4 z-50">
         <button
           onClick={handleLogout}
@@ -81,7 +80,6 @@ const Dashboard = () => {
         </button>
       </div>
 
-      {/* ---------- SIDEBAR ---------- */}
       <div className="sideBar">
         <div className="upperSide">
           <div className="upperSideTop">
@@ -109,27 +107,27 @@ const Dashboard = () => {
           <button className="chat_bt mb-4" onClick={handleNewChat}>
             New chat
           </button>
-          
+
           <div className="mt-16 px-2 text-white">
-             <h2 className="text-xl p-5 font-bold mb-2 ">Conversation History</h2>
-              <div className="flex flex-col gap-2 max-h-60 overflow-y-auto scrollbar-hide">
+            <h2 className="text-xl p-5 font-bold mb-2">Conversation History</h2>
+            <div className="flex flex-col gap-2 max-h-60 overflow-y-auto scrollbar-hide">
               {chatHistory.length === 0 ? (
-              <p className="text-sm text-gray-400">No messages yet</p>
+                <p className="text-sm text-gray-400">No messages yet</p>
               ) : (
-              chatHistory.map((conv, index) => (
-             <div
-            key={conv.id}
-            onClick={() => setSelectedChatId(conv.id)}
-            className={`text-lg p-2 rounded cursor-pointer ${
-            selectedChatId === conv.id ? "border border-white" : ""
-          }`}
-          >
-          {conv.title || `Conversation ${index + 1}`}
-              </div>
-            ))
-            )}
-        </div>
-        </div>
+                chatHistory.map((conv, index) => (
+                  <div
+                    key={conv.id}
+                    onClick={() => setSelectedChatId(conv.id)}
+                    className={`text-lg p-2 rounded cursor-pointer ${
+                      selectedChatId === conv.id ? "border border-white" : ""
+                    }`}
+                  >
+                    {conv.title || `Conversation ${index + 1}`}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="lowerSide">
@@ -141,7 +139,6 @@ const Dashboard = () => {
             <img src={saved} alt="Saved" className="listitemsImg" />
             Saved
           </div>
-
           <div className="listItems">
             <img
               src={photoURL}
@@ -153,7 +150,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* ---------- MAIN ---------- */}
       <div className="main">
         <Chat
           selectedModel={selectedModel}

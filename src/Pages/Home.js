@@ -1,21 +1,39 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import '../App.css';
-import './Home.css'; // Custom styles for login/signup card
+import './Home.css';
+import API_BASE_URL from '../Components/api'; // adjust path if needed
 
 const Home = () => {
   const [isSignup, setIsSignup] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true); // 👈 NEW: loading state
   const navigate = useNavigate();
+
+  // ✅ Auto-redirect if already logged in
+  useEffect(() => {
+    axios
+      .get(`${API_BASE_URL}/`, { withCredentials: true })
+      .then((res) => {
+        if (res.data.authenticated) {
+          localStorage.setItem("user", JSON.stringify({ username: res.data.user }));
+          navigate("/dashboard/chat");
+        }
+      })
+      .catch(() => {
+        // not logged in — stay on login page
+      })
+      .finally(() => setLoading(false)); // 👈 stop loading regardless
+  }, []);
 
   const handleAuth = async () => {
     const endpoint = isSignup ? "signup" : "login";
     try {
       const response = await axios.post(
-        `http://localhost:5000/${endpoint}`,
+        `${API_BASE_URL}/${endpoint}`,
         { username, password },
         { withCredentials: true }
       );
@@ -42,6 +60,11 @@ const Home = () => {
       }
     }
   };
+
+  // ✅ Don't show the login screen while checking session
+  if (loading) {
+    return <div className="text-white text-center mt-20">Checking session...</div>;
+  }
 
   return (
     <div className="Home">
