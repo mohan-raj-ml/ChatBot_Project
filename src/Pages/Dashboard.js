@@ -10,7 +10,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import ShareIcon from "@mui/icons-material/Share";
 import {
   Brightness7 as LightIcon,
-  Brightness4 as DarkIcon
+  Brightness4 as DarkIcon,
 } from "@mui/icons-material";
 
 const Dashboard = () => {
@@ -35,17 +35,19 @@ const Dashboard = () => {
   }, [theme]);
 
   useEffect(() => {
-    axios.get("http://localhost:8000/api/get_models", { withCredentials: true })
-      .then(res => {
+    axios
+      .get("http://localhost:8000/api/get_models", { withCredentials: true })
+      .then((res) => {
         const modelList = res.data.response[0] || [];
         setModels(modelList);
-        setSelectedModel(""); // Require user to select
+        setSelectedModel("");
       })
-      .catch(err => console.error("Error fetching models:", err));
+      .catch((err) => console.error("Error fetching models:", err));
 
-    axios.get("http://localhost:8000/api/list_chats", { withCredentials: true })
-      .then(res => setChatHistory(res.data.chats || []))
-      .catch(err => console.error("Error loading chat history:", err));
+    axios
+      .get("http://localhost:8000/api/list_chats", { withCredentials: true })
+      .then((res) => setChatHistory(res.data.chats || []))
+      .catch((err) => console.error("Error loading chat history:", err));
   }, []);
 
   const handleNewChat = async () => {
@@ -125,17 +127,17 @@ const Dashboard = () => {
         ☰
       </button>
 
-      <div className={`fixed md:relative z-30 h-full w-[270px] overflow-y-auto bg-white dark:bg-gray-800 text-gray-900 dark:text-white transform transition-transform duration-300
-  ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <div className={`fixed md:relative z-30 h-full w-[270px] overflow-visible bg-white dark:bg-gray-800 text-gray-900 dark:text-white transform transition-transform duration-300
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="flex flex-col h-full">
-          <div className="p-5  border-gray-700">
+          <div className="p-5 border-gray-700">
             <div className="flex items-center space-x-3">
               <img src={gptLogo} alt="Logo" className="w-8 h-8 invert dark:invert-0" />
               <span className="text-xl font-bold">DevBot</span>
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 p-4 overflow-visible">
             <div className="space-y-4">
               <select
                 value={selectedModel}
@@ -157,7 +159,7 @@ const Dashboard = () => {
 
               <div className="pt-6">
                 <h2 className="text-lg font-semibold mb-3">Conversation History</h2>
-                <div className="space-y-1 max-h-[50vh] overflow-y-auto custom-scrollbar">
+                <div className="relative z-10 max-h-[50vh] overflow-y-auto custom-scrollbar pr-1">
                   {chatHistory.length === 0 ? (
                     <p className="text-gray-400 text-sm">No messages yet</p>
                   ) : (
@@ -201,7 +203,7 @@ const Dashboard = () => {
                         )}
                         
                         {hoveredChatId === conv.id && (
-                          <div className="flex">
+                          <div className="flex relative">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -211,9 +213,9 @@ const Dashboard = () => {
                             >
                               <MoreVertIcon className="text-sm" />
                             </button>
-                            
+
                             {menuOpenId === conv.id && (
-                              <div className="absolute right-0 top-8 mt-1 bg-gray-900 border border-gray-700 rounded-md shadow-lg z-10 w-32">
+                              <div className="absolute right-0 top-full mt-1 bg-gray-900 border border-gray-700 rounded-md shadow-lg z-50 w-32">
                                 <button
                                   onClick={() => {
                                     setEditChatId(conv.id);

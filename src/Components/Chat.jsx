@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import gptImgLogo from "../assets/chatgptLogo.svg";
-import { Mic, Paperclip, Send } from "lucide-react";
+import { Mic, Paperclip, Send, Copy, Check, Square } from "lucide-react";
 
 const Chat = ({
   selectedModel,
@@ -14,6 +14,8 @@ const Chat = ({
   const [messageData, setMessageData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
+  const [copiedIndex, setCopiedIndex] = useState(null);
+  const [controller, setController] = useState(null);
   const chatEndRef = useRef(null);
 
   const user = JSON.parse(localStorage.getItem("user"));
@@ -21,10 +23,7 @@ const Chat = ({
   const userAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${username}`;
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 50);
-    return () => clearTimeout(timeout);
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messageData, loading]);
 
   useEffect(() => {
@@ -56,56 +55,73 @@ const Chat = ({
     setHasStarted(true);
     setLoading(true);
 
+    const abortController = new AbortController();
+    setController(abortController);
+
     try {
       let currentChatId = selectedChatId;
 
-      // Create chat if needed
       if (!currentChatId) {
         const chatRes = await axios.post(
           "http://localhost:8000/api/create_chat",
-          { title: "New Chat" }, // Initial dummy title
+          { title: "New Chat" },
           { withCredentials: true }
         );
         currentChatId = chatRes.data.chat_id;
         setSelectedChatId(currentChatId);
       }
 
-      // Send prompt
-      await axios.post(
+      const res = await axios.post(
         "http://localhost:8000/api/respond",
         {
-          prompt: typedValue,
+          prompt: userMessage.message,
           model: selectedModel,
           chat_id: currentChatId,
         },
-        { withCredentials: true }
+        {
+          withCredentials: true,
+          signal: abortController.signal,
+        }
       );
 
-      // Fetch updated history
-      const res2 = await axios.get(
-        `http://localhost:8000/api/chat_history?chat_id=${currentChatId}`,
-        { withCredentials: true }
-      );
-      const formatted2 = res2.data.map((m) => ({
-        type: m.role === "user" ? "Sender" : "Receiver",
-        message: m.content,
-      }));
-      setMessageData(formatted2);
+      const assistantMessage = {
+        type: "Receiver",
+        message: res.data.response,
+      };
+      setMessageData((prev) => [...prev, assistantMessage]);
 
-      // Refresh sidebar chat list
       const refreshed = await axios.get("http://localhost:8000/api/list_chats", {
         withCredentials: true,
       });
       setChatHistory(refreshed.data.chats || []);
     } catch (err) {
-      const errorMessage = "⚠️ Error getting response.";
-      setMessageData((prev) => [
-        ...prev,
-        { type: "Receiver", message: errorMessage },
-      ]);
+      if (axios.isCancel(err)) {
+        console.log("Generation stopped.");
+      } else {
+        console.error("Error generating response:", err);
+        setMessageData((prev) => [
+          ...prev,
+          { type: "Receiver", message: "⚠️ Error getting response." },
+        ]);
+      }
     } finally {
       setLoading(false);
+      setController(null);
     }
+  };
+
+  const handleStop = () => {
+    if (controller) {
+      controller.abort();
+      setController(null);
+      setLoading(false);
+    }
+  };
+
+  const handleCopy = (text, index) => {
+    navigator.clipboard.writeText(text);
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 1500);
   };
 
   return (
@@ -122,43 +138,34 @@ const Chat = ({
         )}
 
         {messageData.map((msg, idx) => (
-          <div
-            key={idx}
-            className={`flex ${msg.type === "Sender" ? "justify-end" : "justify-start"}`}
-          >
-            {msg.type === "Sender" ? (
-              <div className="flex items-start justify-end max-w-[85%]">
-                <img
-                  src={userAvatar}
-                  alt="User"
-                  className="w-8 h-8 rounded-full ml-2 order-2"
-                />
-                <div className="prose dark:prose-invert text-gray-900 dark:text-white max-w-none text-right bg-indigo-100 dark:bg-gray-700 p-3 rounded-lg text-base">
-                  <ReactMarkdown>{msg.message}</ReactMarkdown>
-                </div>
+          <div key={idx} className={`flex ${msg.type === "Sender" ? "justify-end" : "justify-start"}`}>
+            <div className="flex items-start max-w-[85%] relative">
+              <img
+                src={msg.type === "Sender" ? userAvatar : gptImgLogo}
+                alt={msg.type}
+                className={`w-8 h-8 rounded-full ${msg.type === "Sender" ? "ml-2 order-2" : "mr-2"}`}
+              />
+              <div
+                className={`prose dark:prose-invert break-words max-w-full text-gray-900 dark:text-white pr-6 ${
+                  msg.type === "Sender" ? "bg-indigo-100 dark:bg-gray-700" : "bg-gray-100 dark:bg-gray-800"
+                } p-3 pr-10 rounded-lg text-base relative`}
+              >
+                <ReactMarkdown>{msg.message}</ReactMarkdown>
+                <button
+                  className="absolute top-1 right-1 p-1 text-gray-400 hover:text-gray-700 dark:hover:text-white"
+                  onClick={() => handleCopy(msg.message, idx)}
+                  title="Copy message"
+                >
+                  {copiedIndex === idx ? <Check size={14} /> : <Copy size={14} />}
+                </button>
               </div>
-            ) : (
-              <div className="flex items-start justify-end max-w-[85%]">
-                <img
-                  src={gptImgLogo}
-                  alt="Bot"
-                  className="w-8 h-8 rounded-full mr-2"
-                />
-                <div className="prose dark:prose-invert text-gray-900 dark:text-white max-w-none text-left bg-gray-100 dark:bg-gray-800 p-3 rounded-lg text-base">
-                  <ReactMarkdown>{msg.message}</ReactMarkdown>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         ))}
 
         {loading && (
           <div className="flex items-end">
-            <img
-              src={gptImgLogo}
-              alt="Bot"
-              className="w-8 h-8 rounded-full mr-2"
-            />
+            <img src={gptImgLogo} alt="Bot" className="w-8 h-8 rounded-full mr-2" />
             <div className="bg-gray-200 dark:bg-gray-700 rounded-r-xl rounded-tl-xl px-4 py-3">
               <div className="flex space-x-2">
                 <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
@@ -171,7 +178,7 @@ const Chat = ({
         <div ref={chatEndRef} />
       </div>
 
-      {/* Input */}
+      {/* Input Box */}
       <div className="p-4 border-t border-black dark:border-gray-700">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-end bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700">
@@ -181,7 +188,7 @@ const Chat = ({
 
             <textarea
               rows={1}
-              className="flex-1 resize-none py-3 px-1 bg-transparent outline-none max-h-32 text-base text-gray-900 dark:text-white"
+              className="custom-scrollbar flex-1 resize-none py-3 px-1 bg-transparent outline-none max-h-32 text-base text-gray-900 dark:text-white overflow-y-auto"
               placeholder="Send a message..."
               value={typedValue}
               onChange={(e) => {
@@ -200,7 +207,15 @@ const Chat = ({
             />
 
             <div className="flex p-2">
-              {typedValue ? (
+              {loading ? (
+                <button
+                  onClick={handleStop}
+                  className="p-2 bg-gray-400 text-white rounded-full hover:bg-gray-500"
+                  title="Stop"
+                >
+                  <Square size={14} />
+                </button>
+              ) : typedValue ? (
                 <button
                   onClick={handleSubmit}
                   className="p-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700"

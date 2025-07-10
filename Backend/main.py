@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
@@ -13,20 +13,25 @@ from langchain.llms.base import LLM
 
 app = FastAPI()
 
-app.add_middleware(CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+# ✅ CORS Middleware (must be FIRST and specific if using cookies)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Do NOT use "*" with credentials
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
-app.add_middleware(SessionMiddleware,
+# ✅ Session middleware (must be after CORS)
+app.add_middleware(
+    SessionMiddleware,
     secret_key="supersecretkey",
     max_age=60 * 60 * 24 * 4,
     same_site="lax",
     session_cookie="session"
 )
 
+# ✅ SQLite DB setup
 DB_NAME = 'users.db'
 
 def get_db():
@@ -41,6 +46,7 @@ def init_db():
         with open('schema.sql', 'r') as f:
             db.executescript(f.read())
 
+# ✅ Custom LangChain-compatible LLM wrapper
 class OllamaLLM(LLM):
     model: str = "mistral"
 
@@ -60,6 +66,7 @@ class OllamaLLM(LLM):
     def _llm_type(self):
         return "ollama_custom"
 
+# ✅ Pydantic models
 class User(BaseModel):
     username: str
     password: str
@@ -76,11 +83,13 @@ class RenameChatRequest(BaseModel):
     chat_id: int
     new_title: str
 
+# ✅ Auth routes
 @app.post("/signup")
 def signup(user: User):
     db = get_db()
     try:
-        db.execute("INSERT INTO users (username, password) VALUES (?, ?)", (user.username.strip(), user.password.strip()))
+        db.execute("INSERT INTO users (username, password) VALUES (?, ?)",
+                   (user.username.strip(), user.password.strip()))
         db.commit()
         return {"success": True, "message": "Signup successful."}
     except sqlite3.IntegrityError:
@@ -89,7 +98,8 @@ def signup(user: User):
 @app.post("/login")
 async def login(user: User, request: Request):
     db = get_db()
-    result = db.execute("SELECT * FROM users WHERE username = ? AND password = ?", (user.username, user.password)).fetchone()
+    result = db.execute("SELECT * FROM users WHERE username = ? AND password = ?",
+                        (user.username, user.password)).fetchone()
     if result:
         request.session['user'] = user.username
         return {"success": True, "message": "Login successful."}
@@ -107,6 +117,7 @@ def index(request: Request):
         return JSONResponse(status_code=401, content={"authenticated": False, "message": "User not logged in"})
     return {"authenticated": True, "user": user}
 
+# ✅ Chat functionality
 @app.get("/api/get_models")
 def get_models():
     try:
@@ -226,6 +237,12 @@ def delete_chat(chat_id: int, request: Request):
     db.commit()
     return {"success": True}
 
+# ✅ Optional: handle preflight CORS for older clients
+@app.options("/{rest_of_path:path}")
+async def preflight(rest_of_path: str):
+    return Response(status_code=204)
+
+# ✅ On server startup, initialize the database
 @app.on_event("startup")
 def startup():
     init_db()
