@@ -17,7 +17,7 @@ const Chat = ({
   const username = user?.username || "Guest";
   const userAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${username}`;
 
-  // Scroll to bottom anytime messages or loading changes
+  // Auto-scroll to bottom on message update
   useEffect(() => {
     const timeout = setTimeout(() => {
       chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -25,7 +25,7 @@ const Chat = ({
     return () => clearTimeout(timeout);
   }, [messageData, loading]);
 
-  // Load chat history when switching conversations
+  // Load chat history on chat change
   useEffect(() => {
     const loadChatHistory = async () => {
       if (!selectedChatId) return;
@@ -58,6 +58,7 @@ const Chat = ({
     try {
       let currentChatId = selectedChatId;
 
+      // Create new chat if one doesn't exist
       if (!currentChatId) {
         const chatRes = await axios.post(
           "http://localhost:5000/api/create_chat",
@@ -66,17 +67,17 @@ const Chat = ({
         );
         currentChatId = chatRes.data.chat_id;
         setSelectedChatId(currentChatId);
-        setChatHistory((prev) => [
-          ...prev,
-          {
-            id: currentChatId,
-            title: chatRes.data.title,
-            created_at: new Date().toISOString(),
-          },
-        ]);
+
+        // Refresh sidebar chat history
+        const updatedHistory = await axios.get(
+          "http://localhost:5000/api/list_chats",
+          { withCredentials: true }
+        );
+        setChatHistory(updatedHistory.data.chats || []);
       }
 
-      const res = await axios.post(
+      // Send prompt
+      await axios.post(
         "http://localhost:5000/api/respond",
         {
           prompt: typedValue,
@@ -86,12 +87,25 @@ const Chat = ({
         { withCredentials: true }
       );
 
-      const reply = {
-        type: "Receiver",
-        message: res.data.response || "No reply.",
-      };
+      // Reload full chat history
+      const res2 = await axios.get(
+        `http://localhost:5000/api/chat_history?chat_id=${currentChatId}`,
+        { withCredentials: true }
+      );
+      const formatted2 = res2.data.map((m) => ({
+        type: m.role === "user" ? "Sender" : "Receiver",
+        message: m.content,
+      }));
 
-      setMessageData((prev) => [...prev, reply]);
+      // ✅ Patch to keep user message already shown in UI
+      if (messageData.length === 1 && messageData[0].type === "Sender") {
+        setMessageData([
+          messageData[0],
+          ...formatted2.filter((m) => m.type === "Receiver"),
+        ]);
+      } else {
+        setMessageData(formatted2);
+      }
     } catch (err) {
       const errorMessage = "⚠️ Error getting response.";
       setMessageData((prev) => [
