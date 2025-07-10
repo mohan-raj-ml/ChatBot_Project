@@ -8,13 +8,32 @@ from typing import Optional
 import sqlite3
 import re
 import requests
+from pydantic import BaseModel
+from fastapi import FastAPI, Request, HTTPException
+
+app = FastAPI() 
+
+class RenameChatRequest(BaseModel):
+    chat_id: int
+    new_title: str
+
+@app.post("/api/rename_chat")
+def rename_chat(req: RenameChatRequest, request: Request):
+    username = request.session.get("user")
+    if not username:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    db = get_db()
+    db.execute("UPDATE chats SET title = ? WHERE id = ?", (req.new_title, req.chat_id))
+    db.commit()
+    return {"success": True, "message": "Chat renamed successfully."}
 
 app = FastAPI()
 
 # ------------------- MIDDLEWARE -----------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3001","http://localhost:3000"],  # your frontend
+    allow_origins=["http://localhost:3001", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -22,8 +41,8 @@ app.add_middleware(
 
 app.add_middleware(
     SessionMiddleware,
-    secret_key="supersecretkey",             # use env var in production
-    max_age=60 * 60 * 24 * 4,                # 7 days in seconds
+    secret_key="supersecretkey",
+    max_age=60 * 60 * 24 * 4,
     same_site="lax",
     session_cookie="session"
 )
@@ -55,6 +74,10 @@ class PromptRequest(BaseModel):
 
 class ChatRequest(BaseModel):
     title: Optional[str] = "New Chat"
+
+class RenameChatRequest(BaseModel):
+    chat_id: int
+    new_title: str
 
 # ------------------- AUTH -----------------------
 @app.post("/signup")
@@ -135,6 +158,24 @@ def create_chat(req: ChatRequest, request: Request):
     chat_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
     return {"success": True, "chat_id": chat_id, "title": req.title}
 
+@app.post("/api/rename_chat")
+def rename_chat(req: RenameChatRequest, request: Request):
+    username = request.session.get("user")
+    if not username:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    db = get_db()
+    user = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+
+    # Ensure chat belongs to user
+    existing_chat = db.execute("SELECT id FROM chats WHERE id = ? AND user_id = ?", (req.chat_id, user["id"])).fetchone()
+    if not existing_chat:
+        raise HTTPException(status_code=404, detail="Chat not found or unauthorized")
+
+    db.execute("UPDATE chats SET title = ? WHERE id = ?", (req.new_title, req.chat_id))
+    db.commit()
+    return {"success": True, "message": "Chat renamed."}
+
 @app.post("/api/respond")
 def respond(req: PromptRequest, request: Request):
     username = request.session.get("user")
@@ -180,7 +221,6 @@ def post_prompt_to_api(prompt, model):
     except Exception as e:
         return f"Error contacting LLM: {e}"
 
-# ------------------- STARTUP -----------------------
 @app.on_event("startup")
 def startup():
     init_db()

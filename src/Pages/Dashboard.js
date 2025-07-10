@@ -6,6 +6,10 @@ import gptLogo from "../assets/chatgpt.svg";
 import home from "../assets/home.svg";
 import saved from "../assets/bookmark.svg";
 import LogoutIcon from "@mui/icons-material/Logout";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
+import ShareIcon from "@mui/icons-material/Share";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -17,6 +21,10 @@ const Dashboard = () => {
   const [selectedModel, setSelectedModel] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
   const [selectedChatId, setSelectedChatId] = useState(null);
+  const [hoveredChatId, setHoveredChatId] = useState(null);
+  const [editChatId, setEditChatId] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [menuOpenId, setMenuOpenId] = useState(null);
 
   useEffect(() => {
     axios
@@ -68,6 +76,44 @@ const Dashboard = () => {
     }
   };
 
+  const handleDeleteChat = async (chatId) => {
+    try {
+      await axios.post("http://localhost:8000/api/delete_chat", null, {
+        params: { chat_id: chatId },
+        withCredentials: true,
+      });
+      setChatHistory((prev) => prev.filter((chat) => chat.id !== chatId));
+      if (selectedChatId === chatId) setSelectedChatId(null);
+    } catch (err) {
+      console.error("Error deleting chat:", err);
+    }
+  };
+
+  const handleRenameChat = async (chatId) => {
+    try {
+      await axios.post(
+        "http://localhost:8000/api/rename_chat",
+        { chat_id: chatId, new_title: editTitle },
+        { withCredentials: true }
+      );
+      setChatHistory((prev) =>
+        prev.map((chat) =>
+          chat.id === chatId ? { ...chat, title: editTitle } : chat
+        )
+      );
+      setEditChatId(null);
+    } catch (err) {
+      console.error("Rename failed:", err);
+    }
+  };
+
+  const handleShare = (chatId) => {
+    const shareUrl = `${window.location.origin}/share/${chatId}`;
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      alert("Share link copied to clipboard!");
+    });
+  };
+
   return (
     <div className="App relative">
       <div className="absolute top-4 right-4 z-50">
@@ -110,19 +156,86 @@ const Dashboard = () => {
 
           <div className="mt-16 px-2 text-white">
             <h2 className="text-xl p-5 font-bold mb-2">Conversation History</h2>
-            <div className="flex flex-col gap-2 max-h-60 overflow-y-auto scrollbar-hide">
+            <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto scrollbar-hide">
               {chatHistory.length === 0 ? (
                 <p className="text-sm text-gray-400">No messages yet</p>
               ) : (
                 chatHistory.map((conv, index) => (
                   <div
                     key={conv.id}
-                    onClick={() => setSelectedChatId(conv.id)}
-                    className={`text-lg p-2 rounded cursor-pointer ${
+                    onMouseEnter={() => setHoveredChatId(conv.id)}
+                    onMouseLeave={() => {
+                      setHoveredChatId(null);
+                      setEditChatId(null);
+                      setMenuOpenId(null);
+                    }}
+                    className={`relative text-lg p-2 rounded cursor-pointer ${
                       selectedChatId === conv.id ? "border border-white" : ""
                     }`}
                   >
-                    {conv.title || `Conversation ${index + 1}`}
+                    {editChatId === conv.id ? (
+                      <input
+                        type="text"
+                        value={editTitle}
+                        autoFocus
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleRenameChat(conv.id);
+                          else if (e.key === "Escape") setEditChatId(null);
+                        }}
+                        className="bg-transparent border-b border-white outline-none text-white w-full"
+                      />
+                    ) : (
+                      <div onClick={() => setSelectedChatId(conv.id)}>
+                        {conv.title || `Conversation ${index + 1}`}
+                      </div>
+                    )}
+
+                    {hoveredChatId === conv.id && (
+                      <div className="absolute right-2 top-1">
+                        <MoreVertIcon
+                          onClick={() =>
+                            setMenuOpenId(menuOpenId === conv.id ? null : conv.id)
+                          }
+                          className="text-white cursor-pointer"
+                        />
+                        {menuOpenId === conv.id && (
+                          <div className="absolute right-0 mt-1 bg-white text-black shadow rounded z-10 text-sm w-32">
+                            <div
+                              onClick={() => {
+                                setEditChatId(conv.id);
+                                setEditTitle(conv.title);
+                                setMenuOpenId(null);
+                              }}
+                              className="flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                            >
+                              <EditIcon fontSize="small" className="mr-2" />
+                              Rename
+                            </div>
+                            <div
+                              onClick={() => {
+                                handleDeleteChat(conv.id);
+                                setMenuOpenId(null);
+                              }}
+                              className="flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                            >
+                              <DeleteIcon fontSize="small" className="mr-2" />
+                              Delete
+                            </div>
+                            <div
+                              onClick={() => {
+                                handleShare(conv.id);
+                                setMenuOpenId(null);
+                              }}
+                              className="flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                            >
+                              <ShareIcon fontSize="small" className="mr-2" />
+                              Share
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))
               )}

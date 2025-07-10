@@ -3,6 +3,7 @@ import './App.css';
 import Dashboard from './Pages/Dashboard';
 import Home from './Pages/Home';
 import ProtectedRoute from './Components/ProtectedRoute';
+import SharedChat from './Pages/SharedChat'; // <-- import this
 
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 
@@ -26,6 +27,10 @@ function App() {
         }
       ]
     },
+    {
+      path: '/share/:chat_id', // <-- shared conversation route
+      element: <SharedChat />
+    }
   ]);
 
   return (
