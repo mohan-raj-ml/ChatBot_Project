@@ -1,3 +1,5 @@
+// Dashboard.js
+
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -27,6 +29,7 @@ const Dashboard = () => {
   const [editChatId, setEditChatId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [menuOpenId, setMenuOpenId] = useState(null);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [theme, setTheme] = useState("light");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -119,7 +122,7 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 relative">
       <button 
         className="md:hidden fixed top-4 left-4 z-40 p-2 rounded-lg bg-indigo-600 text-white"
         onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -166,82 +169,69 @@ const Dashboard = () => {
                     chatHistory.map((conv, index) => (
                       <div
                         key={conv.id}
+                        className="relative group"
                         onMouseEnter={() => setHoveredChatId(conv.id)}
-                        onMouseLeave={() => {
-                          setHoveredChatId(null);
-                          setEditChatId(null);
-                          setMenuOpenId(null);
+                        onMouseLeave={(e) => {
+                          const menu = document.getElementById("chat-menu");
+                          if (!menu || !menu.contains(e.relatedTarget)) {
+                            setHoveredChatId(null);
+                            if (menuOpenId !== conv.id) {
+                              setEditChatId(null);
+                              setMenuOpenId(null);
+                            }
+                          }
                         }}
-                        className={`relative p-2 rounded-md cursor-pointer flex justify-between items-center ${
-                          selectedChatId === conv.id 
-                            ? "bg-indigo-600 text-white" 
-                            : "hover:bg-gray-700 hover:text-white"
-                        }`}
                       >
-                        {editChatId === conv.id ? (
-                          <input
-                            type="text"
-                            value={editTitle}
-                            autoFocus
-                            onChange={(e) => setEditTitle(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") handleRenameChat(conv.id);
-                              else if (e.key === "Escape") setEditChatId(null);
-                            }}
-                            className="w-full bg-transparent border-b border-white outline-none"
-                          />
-                        ) : (
-                          <div 
-                            className="truncate flex-1"
-                            onClick={() => {
-                              setSelectedChatId(conv.id);
-                              setSidebarOpen(false);
-                            }}
-                          >
-                            {conv.title || `Conversation ${index + 1}`}
-                          </div>
-                        )}
-                        
-                        {hoveredChatId === conv.id && (
-                          <div className="flex relative">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setMenuOpenId(menuOpenId === conv.id ? null : conv.id);
+                        <div
+                          className={`p-2 rounded-md cursor-pointer flex justify-between items-center ${
+                            (selectedChatId === conv.id || menuOpenId === conv.id || editChatId === conv.id)
+                              ? "bg-indigo-600 text-white"
+                              : "hover:bg-gray-700 hover:text-white"
+                          }`}
+                        >
+                          {editChatId === conv.id ? (
+                            <input
+                              type="text"
+                              value={editTitle}
+                              autoFocus
+                              onChange={(e) => setEditTitle(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleRenameChat(conv.id);
+                                else if (e.key === "Escape") setEditChatId(null);
                               }}
-                              className="p-1 rounded hover:bg-gray-600"
+                              className="w-full bg-transparent border-b border-white outline-none"
+                            />
+                          ) : (
+                            <div
+                              className="truncate flex-1"
+                              onClick={() => {
+                                setSelectedChatId(conv.id);
+                                setSidebarOpen(false);
+                              }}
                             >
-                              <MoreVertIcon className="text-sm" />
-                            </button>
+                              {conv.title || `Conversation ${index + 1}`}
+                            </div>
+                          )}
 
-                            {menuOpenId === conv.id && (
-                              <div className="absolute right-0 top-full mt-1 bg-gray-900 border border-gray-700 rounded-md shadow-lg z-50 w-32">
-                                <button
-                                  onClick={() => {
-                                    setEditChatId(conv.id);
-                                    setEditTitle(conv.title);
-                                    setMenuOpenId(null);
-                                  }}
-                                  className="flex w-full items-center px-3 py-2 hover:bg-gray-700"
-                                >
-                                  <EditIcon className="mr-2 text-sm" /> Rename
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteChat(conv.id)}
-                                  className="flex w-full items-center px-3 py-2 hover:bg-gray-700"
-                                >
-                                  <DeleteIcon className="mr-2 text-sm" /> Delete
-                                </button>
-                                <button
-                                  onClick={() => handleShare(conv.id)}
-                                  className="flex w-full items-center px-3 py-2 hover:bg-gray-700"
-                                >
-                                  <ShareIcon className="mr-2 text-sm" /> Share
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                          {hoveredChatId === conv.id && (
+                            <div className="flex relative">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setMenuPosition({
+                                    top: rect.bottom + window.scrollY + 4,
+                                    left: rect.left + window.scrollX - 96 + 32,
+                                  });
+                                  setMenuOpenId(menuOpenId === conv.id ? null : conv.id);
+                                }}
+                                className="p-1 rounded hover:bg-gray-600"
+                              >
+                                <MoreVertIcon className="text-sm" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))
                   )}
@@ -261,12 +251,59 @@ const Dashboard = () => {
         </div>
       </div>
 
+      {/* Floating Dropdown Menu */}
+      {menuOpenId && (
+        <div
+          id="chat-menu"
+          onMouseLeave={() => {
+            setHoveredChatId(null);
+            setEditChatId(null);
+            setMenuOpenId(null);
+          }}
+          className="absolute bg-gray-900 border border-gray-700 rounded-md shadow-lg z-[9999] w-32"
+          style={{
+            top: `${menuPosition.top}px`,
+            left: `${menuPosition.left}px`,
+          }}
+        >
+          <button
+            onClick={() => {
+              setEditChatId(menuOpenId);
+              const title = chatHistory.find(c => c.id === menuOpenId)?.title || "";
+              setEditTitle(title);
+              setMenuOpenId(null);
+            }}
+            className="flex w-full items-center px-3 py-2 hover:bg-gray-700"
+          >
+            <EditIcon className="mr-2 text-sm" /> Rename
+          </button>
+          <button
+            onClick={() => {
+              handleDeleteChat(menuOpenId);
+              setMenuOpenId(null);
+            }}
+            className="flex w-full items-center px-3 py-2 hover:bg-gray-700"
+          >
+            <DeleteIcon className="mr-2 text-sm" /> Delete
+          </button>
+          <button
+            onClick={() => {
+              handleShare(menuOpenId);
+              setMenuOpenId(null);
+            }}
+            className="flex w-full items-center px-3 py-2 hover:bg-gray-700"
+          >
+            <ShareIcon className="mr-2 text-sm" /> Share
+          </button>
+        </div>
+      )}
+
       {/* Main Chat Section */}
       <div className="flex-1 flex flex-col">
         <div className="flex justify-between items-center p-4 bg-white dark:bg-gray-800 border-b dark:border-gray-700">
           <div className="flex items-center">
             {!sidebarOpen && (
-              <button 
+              <button
                 className="md:hidden mr-3 p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
                 onClick={() => setSidebarOpen(true)}
               >

@@ -146,19 +146,22 @@ const Chat = ({
                 className={`w-8 h-8 rounded-full ${msg.type === "Sender" ? "ml-2 order-2" : "mr-2"}`}
               />
               <div
-                className={`prose dark:prose-invert break-words max-w-full text-gray-900 dark:text-white pr-6 ${
-                  msg.type === "Sender" ? "bg-indigo-100 dark:bg-gray-700" : "bg-gray-100 dark:bg-gray-800"
-                } p-3 pr-10 rounded-lg text-base relative`}
-              >
-                <ReactMarkdown>{msg.message}</ReactMarkdown>
-                <button
-                  className="absolute top-1 right-1 p-1 text-gray-400 hover:text-gray-700 dark:hover:text-white"
-                  onClick={() => handleCopy(msg.message, idx)}
-                  title="Copy message"
-                >
-                  {copiedIndex === idx ? <Check size={14} /> : <Copy size={14} />}
-                </button>
-              </div>
+  className={`prose dark:prose-invert break-words max-w-full text-gray-900 dark:text-white pr-16 ${
+    msg.type === "Sender" ? "bg-indigo-100 dark:bg-gray-700" : "bg-gray-100 dark:bg-gray-800"
+  } p-3 rounded-lg text-base relative`}
+>
+  <ReactMarkdown>{msg.message}</ReactMarkdown>
+  
+  <div className="absolute top-1.5 right-1.5">
+    <button
+      className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-white"
+      onClick={() => handleCopy(msg.message, idx)}
+      title="Copy message"
+    >
+      {copiedIndex === idx ? <Check size={14} /> : <Copy size={14} />}
+    </button>
+  </div>
+</div>
             </div>
           </div>
         ))}

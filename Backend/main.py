@@ -208,7 +208,12 @@ def respond(req: PromptRequest, request: Request):
     db.commit()
 
     if chat_title == "New Chat":
-        title_prompt = PromptTemplate.from_template("Generate a short 3-5 word title for this chat:\n\nUser: {prompt}")
+        title_prompt = PromptTemplate.from_template("You are a helpful assistant tasked with naming chat conversations. "
+    "Given the user's latest message, "
+    "generate a concise and descriptive title that clearly reflects the topic, question, or task. "
+    "Keep it short (3-7 words), use title case, and avoid quotation marks.\n\n"
+    "User Message:\n{prompt}\n\n"
+    "Chat Title:")
         title_chain = LLMChain(llm=llm, prompt=title_prompt)
         generated_title = title_chain.run(prompt=req.prompt).strip().replace("\n", " ")[:50]
         if generated_title:
