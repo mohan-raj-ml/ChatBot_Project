@@ -113,13 +113,18 @@ const Chat = ({
         withCredentials: true,
       });
       setChatHistory(refreshed.data.chats || []);
-    } catch (err) {
-      console.error("Error generating response:", err);
-      setMessageData((prev) => [
-        ...prev,
-        { type: "Receiver", message: "⚠️ Error getting response." },
-      ]);
-    } finally {
+   } catch (err) {
+  if (axios.isCancel(err)) {
+    console.log("Request cancelled by user");
+  } else {
+    console.error("Error generating response:", err);
+    setMessageData((prev) => [
+      ...prev,
+      { type: "Receiver", message: "⚠️ Error getting response." },
+    ]);
+  }
+}
+ finally {
       setLoading(false);
       setController(null);
       setAttachedFile(null); // Allow new file selection

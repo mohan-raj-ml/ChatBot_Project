@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, UploadFile, Form, File
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -6,11 +6,11 @@ from pydantic import BaseModel
 from typing import Optional
 import sqlite3
 import requests
-from fastapi import File, UploadFile, Form
 import shutil
 import os
-from fastapi import FastAPI, UploadFile, Form, File, Request
-from fastapi.responses import JSONResponse
+import io
+from pptx import Presentation
+import asyncio # Import asyncio for the sleep
 
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
@@ -18,16 +18,14 @@ from langchain.llms.base import LLM
 
 app = FastAPI()
 
-# ✅ CORS Middleware (must be FIRST and specific if using cookies)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Do NOT use "*" with credentials
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ Session middleware (must be after CORS)
 app.add_middleware(
     SessionMiddleware,
     secret_key="supersecretkey",
@@ -36,32 +34,6 @@ app.add_middleware(
     session_cookie="session"
 )
 
-
-@app.post("/api/respond")
-async def respond(
-    prompt: str = Form(...),
-    model: str = Form(...),
-    chat_id: str = Form(...),
-    file: UploadFile = File(None)
-):
-    try:
-        # Handle file if uploaded
-        file_content = None
-        if file:
-            file_content = await file.read()
-            # You can use file_content with RAG logic here
-
-        # Generate response from your model (replace this with actual LLM logic)
-        response_text = f"🧠 Model ({model}) response to: '{prompt}'"
-        if file:
-            response_text += f" (File '{file.filename}' attached, size: {len(file_content)} bytes)"
-
-        return JSONResponse(content={"response": response_text})
-    except Exception as e:
-        print("Error:", e)
-        return JSONResponse(status_code=500, content={"response": "⚠️ Internal server error."})
-
-# ✅ SQLite DB setup
 DB_NAME = 'users.db'
 
 def get_db():
@@ -76,7 +48,6 @@ def init_db():
         with open('schema.sql', 'r') as f:
             db.executescript(f.read())
 
-# ✅ Custom LangChain-compatible LLM wrapper
 class OllamaLLM(LLM):
     model: str = "mistral"
 
@@ -96,7 +67,6 @@ class OllamaLLM(LLM):
     def _llm_type(self):
         return "ollama_custom"
 
-# ✅ Pydantic models
 class User(BaseModel):
     username: str
     password: str
@@ -113,7 +83,6 @@ class RenameChatRequest(BaseModel):
     chat_id: int
     new_title: str
 
-# ✅ Auth routes
 @app.post("/signup")
 def signup(user: User):
     db = get_db()
@@ -147,7 +116,6 @@ def index(request: Request):
         return JSONResponse(status_code=401, content={"authenticated": False, "message": "User not logged in"})
     return {"authenticated": True, "user": user}
 
-# ✅ Chat functionality
 @app.get("/api/get_models")
 def get_models():
     try:
@@ -201,65 +169,131 @@ def rename_chat(req: RenameChatRequest, request: Request):
     return {"success": True}
 
 @app.post("/api/respond")
-def respond(req: PromptRequest, request: Request):
+async def respond(
+    request: Request,
+    prompt: str = Form(...),
+    model: str = Form(...),
+    chat_id: int = Form(...),
+    file: UploadFile = File(None)
+):
     username = request.session.get("user")
     if not username:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     db = get_db()
-    user_id = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()["id"]
-    chat_row = db.execute("SELECT title FROM chats WHERE id = ?", (req.chat_id,)).fetchone()
-    chat_title = chat_row["title"] if chat_row else "New Chat"
+    try:
+        user_id = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()["id"]
+        chat_row = db.execute("SELECT title FROM chats WHERE id = ?", (chat_id,)).fetchone()
+        chat_title = chat_row["title"] if chat_row else "New Chat"
 
-    messages = db.execute("SELECT role, content FROM messages WHERE chat_id = ? ORDER BY timestamp ASC", (req.chat_id,)).fetchall()
-    memory_row = db.execute("SELECT memory FROM chat_memory WHERE chat_id = ?", (req.chat_id,)).fetchone()
-    memory_summary = memory_row["memory"] if memory_row else ""
+        # Save user message immediately, even if assistant response fails or is stopped
+        # This ensures the user's intent is recorded.
+        db.execute("INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)", (chat_id, "user", prompt))
+        db.commit()
+        
+        # Get the ID of the last inserted message (which is the user's message)
+        # This can be useful for debugging or if we ever need to link them
+        user_message_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-    db.execute("INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)", (req.chat_id, "user", req.prompt))
-    db.commit()
 
-    context = memory_summary.strip() + "\n\n" if memory_summary else ""
-    if len(messages) == 0:
-        context += f"User: {req.prompt}\nAssistant:"
-    elif len(messages) == 1:
-        last = messages[-1]
-        context += f"{last['role'].capitalize()}: {last['content']}\nUser: {req.prompt}\nAssistant:"
-    else:
+        # Re-fetch messages including the newly saved user message to build context
+        messages = db.execute("SELECT role, content FROM messages WHERE chat_id = ? ORDER BY timestamp ASC", (chat_id,)).fetchall()
+        memory_row = db.execute("SELECT memory FROM chat_memory WHERE chat_id = ?", (chat_id,)).fetchone()
+        memory_summary = memory_row["memory"] if memory_row else ""
+
+        context = memory_summary.strip() + "\n\n" if memory_summary else ""
         for m in messages:
             context += f"{m['role'].capitalize()}: {m['content']}\n"
-        context += f"User: {req.prompt}\nAssistant:"
 
-    llm = OllamaLLM(model=req.model)
-    prompt = PromptTemplate.from_template("{context}")
-    chain = LLMChain(llm=llm, prompt=prompt)
-    response = chain.run(context=context)
+        file_text = ""
+        if file and file.filename.endswith(".pptx"):
+            file_bytes = await file.read()
+            prs = Presentation(io.BytesIO(file_bytes))
+            for slide in prs.slides:
+                for shape in slide.shapes:
+                    if hasattr(shape, "text"):
+                        file_text += shape.text + "\n"
+            context += f"\n[File Content from '{file.filename}']:\n{file_text.strip()}"
 
-    db.execute("INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)", (req.chat_id, "assistant", response))
-    db.commit()
+        llm = OllamaLLM(model=model)
+        prompt_template = PromptTemplate.from_template("{context}Assistant:")
+        chain = LLMChain(llm=llm, prompt=prompt_template)
 
-    if chat_title == "New Chat":
-        title_prompt = PromptTemplate.from_template("You are a helpful assistant tasked with naming chat conversations. "
-    "Given the user's latest message, "
-    "generate a concise and descriptive title that clearly reflects the topic, question, or task. "
-    "Keep it short (3-7 words), use title case, and avoid quotation marks.\n\n"
-    "User Message:\n{prompt}\n\n"
-    "Chat Title:")
-        title_chain = LLMChain(llm=llm, prompt=title_prompt)
-        generated_title = title_chain.run(prompt=req.prompt).strip().replace("\n", " ")[:50]
-        if generated_title:
-            db.execute("UPDATE chats SET title = ? WHERE id = ?", (generated_title, req.chat_id))
-            db.commit()
+        assistant_response = "" # Initialize response
+        assistant_message_id = None # To store ID if assistant message is saved
 
-    if len(messages) % 20 == 0:
-        full = "".join(f"{m['role'].capitalize()}: {m['content']}\n" for m in messages)
-        full += f"User: {req.prompt}\nAssistant: {response}"
-        summary_prompt = PromptTemplate.from_template("Summarize this conversation for memory:\n\n{context}")
-        summary_chain = LLMChain(llm=llm, prompt=summary_prompt)
-        summary = summary_chain.run(context=full)
-        db.execute("UPDATE chat_memory SET memory = ? WHERE chat_id = ?", (summary.strip(), req.chat_id))
-        db.commit()
+        try:
+            # Attempt to get response from LLM
+            assistant_response = chain.run(context=context)
 
-    return {"response": response}
+            # Introduce a tiny delay to allow the event loop to process client disconnection.
+            # This can help mitigate the race condition.
+            await asyncio.sleep(0.01) # A very small non-blocking sleep
+
+            # Check if the client is still connected BEFORE saving.
+            if await request.is_disconnected():
+                print(f"Client disconnected after LLM generation for chat {chat_id}. Not saving assistant response.")
+                # If we reached here, and a response was generated, it means it finished fast.
+                # Since the client disconnected, we don't want this response.
+                # We already didn't save it, so just return.
+                return JSONResponse(status_code=200, content={"response": ""})
+
+            # If client is still connected and response is not empty, save it.
+            if assistant_response.strip():
+                db.execute("INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)", (chat_id, "assistant", assistant_response))
+                db.commit()
+                assistant_message_id = db.execute("SELECT last_insert_rowid()").fetchone()[0] # Get ID of saved message
+
+                # Only generate title if it was a new chat and generation was successful
+                if chat_title == "New Chat":
+                    title_prompt = PromptTemplate.from_template("You are a helpful assistant tasked with naming chat conversations. Given the user's latest message, generate a concise and descriptive title that reflects the topic. Keep it short (3-7 words), title case, no quotes.\n\nUser Message:\n{prompt}\n\nChat Title:")
+                    title_chain = LLMChain(llm=llm, prompt=title_prompt)
+                    generated_title = title_chain.run(prompt=prompt).strip().replace("\n", " ")[:50]
+                    if generated_title:
+                        db.execute("UPDATE chats SET title = ? WHERE id = ?", (generated_title, chat_id))
+                        db.commit()
+
+                # Update memory summary if conditions met
+                updated_messages = db.execute("SELECT role, content FROM messages WHERE chat_id = ? ORDER BY timestamp ASC", (chat_id,)).fetchall()
+                if len(updated_messages) % 20 == 0:
+                    full_history = "".join(f"{m['role'].capitalize()}: {m['content']}\n" for m in updated_messages)
+                    summary_prompt = PromptTemplate.from_template("Summarize this conversation for memory:\n\n{context}")
+                    summary_chain = LLMChain(llm=llm, prompt=summary_prompt)
+                    summary = summary_chain.run(context=full_history)
+                    db.execute("UPDATE chat_memory SET memory = ? WHERE chat_id = ?", (summary.strip(), chat_id))
+                    db.commit()
+
+        except Exception as e:
+            # This 'except' block catches errors directly from LLM generation itself
+            print(f"LLM generation failed for chat {chat_id}: {e}")
+            # If an error occurs here, the assistant_response was never fully generated or valid.
+            return JSONResponse(status_code=200, content={"response": ""})
+            
+        finally:
+            # THIS IS THE DELETE LOGIC YOU REQUESTED
+            # If a response was generated and potentially saved, AND the client is now disconnected,
+            # we consider it a 'stopped' response due to race condition and try to delete it.
+            if assistant_message_id and await request.is_disconnected():
+                print(f"Client disconnected AFTER potential save of assistant message ID {assistant_message_id} for chat {chat_id}. Attempting to delete.")
+                try:
+                    db.execute("DELETE FROM messages WHERE id = ?", (assistant_message_id,))
+                    db.commit()
+                    print(f"Successfully deleted assistant message ID {assistant_message_id}.")
+                    # If we deleted it, ensure the frontend gets an empty response
+                    return JSONResponse(status_code=200, content={"response": ""})
+                except Exception as delete_e:
+                    print(f"Error deleting message ID {assistant_message_id}: {delete_e}")
+                    # Even if delete fails, still try to return empty response
+                    return JSONResponse(status_code=200, content={"response": ""})
+
+        # Return the response to the frontend only if it was successfully generated and not aborted
+        return JSONResponse(content={"response": assistant_response})
+
+    except Exception as e:
+        # This catches broader errors outside the LLM generation block (e.g., DB issues, file processing)
+        print(f"General error in /api/respond endpoint for user {username}: {e}")
+        db.rollback() # Rollback any pending transactions for this request
+        return JSONResponse(status_code=500, content={"response": "\u26a0\ufe0f Internal server error."})
 
 @app.post("/api/delete_chat")
 def delete_chat(chat_id: int, request: Request):
@@ -272,12 +306,10 @@ def delete_chat(chat_id: int, request: Request):
     db.commit()
     return {"success": True}
 
-# ✅ Optional: handle preflight CORS for older clients
 @app.options("/{rest_of_path:path}")
 async def preflight(rest_of_path: str):
     return Response(status_code=204)
 
-# ✅ On server startup, initialize the database
 @app.on_event("startup")
 def startup():
     init_db()
