@@ -10,6 +10,7 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import ShareIcon from "@mui/icons-material/Share";
+import { BubbleChart } from '@mui/icons-material';
 import {
   Brightness7 as LightIcon,
   Brightness4 as DarkIcon,
@@ -135,7 +136,7 @@ const Dashboard = () => {
         <div className="flex flex-col h-full">
           <div className="p-5 border-gray-700">
             <div className="flex items-center space-x-3">
-              <img src={gptLogo} alt="Logo" className="w-8 h-8 invert dark:invert-0" />
+                <BubbleChart  className="mr-1 w-6 h-6" />
               <span className="text-xl font-bold">DevBot</span>
             </div>
           </div>
@@ -242,7 +243,7 @@ const Dashboard = () => {
 
           <div className="p-4 border-t border-gray-700">
             <div className="space-y-2">
-              <div className="flex items-center p-2 rounded-md hover:bg-gray-700">
+              <div className="flex items-center p-2 rounded-md ">
                 <img src={photoURL} alt="User" className="w-8 h-8 rounded-full mr-3" />
                 <span className="truncate">{displayName}</span>
               </div>
@@ -333,19 +334,13 @@ const Dashboard = () => {
         </div>
 
         <div className="flex-1 p-10 overflow-hidden">
-          {selectedModel ? (
-            <Chat
-              selectedModel={selectedModel}
-              setChatHistory={setChatHistory}
-              selectedChatId={selectedChatId}
-              setSelectedChatId={setSelectedChatId}
-            />
-          ) : (
-            <div className="h-full flex items-center justify-center text-gray-500">
-              <p className="text-lg">Please select a model to begin chatting.</p>
-            </div>
-          )}
-        </div>
+          <Chat
+  selectedModel={selectedModel}
+  setChatHistory={setChatHistory}
+  selectedChatId={selectedChatId}
+  setSelectedChatId={setSelectedChatId}
+  disableInput={!selectedModel}
+/></div>
       </div>
     </div>
   );
