@@ -6,6 +6,11 @@ from pydantic import BaseModel
 from typing import Optional
 import sqlite3
 import requests
+from fastapi import File, UploadFile, Form
+import shutil
+import os
+from fastapi import FastAPI, UploadFile, Form, File, Request
+from fastapi.responses import JSONResponse
 
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
@@ -30,6 +35,31 @@ app.add_middleware(
     same_site="lax",
     session_cookie="session"
 )
+
+
+@app.post("/api/respond")
+async def respond(
+    prompt: str = Form(...),
+    model: str = Form(...),
+    chat_id: str = Form(...),
+    file: UploadFile = File(None)
+):
+    try:
+        # Handle file if uploaded
+        file_content = None
+        if file:
+            file_content = await file.read()
+            # You can use file_content with RAG logic here
+
+        # Generate response from your model (replace this with actual LLM logic)
+        response_text = f"🧠 Model ({model}) response to: '{prompt}'"
+        if file:
+            response_text += f" (File '{file.filename}' attached, size: {len(file_content)} bytes)"
+
+        return JSONResponse(content={"response": response_text})
+    except Exception as e:
+        print("Error:", e)
+        return JSONResponse(status_code=500, content={"response": "⚠️ Internal server error."})
 
 # ✅ SQLite DB setup
 DB_NAME = 'users.db'
