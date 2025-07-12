@@ -1,24 +1,27 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import axios from "axios";
-import gptImgLogo from "../assets/chatgptLogo.svg";
+import ReactMarkdown from "react-markdown";
+import BubbleChartIcon from "@mui/icons-material/BubbleChart"; // ✅ New Icon
 
 const SharedChat = () => {
   const { chat_id } = useParams();
   const [messages, setMessages] = useState([]);
   const [error, setError] = useState("");
+  const messagesEndRef = useRef(null);
 
   useEffect(() => {
     const fetchChat = async () => {
       try {
-        const res = await axios.get(`http://localhost:8000/api/chat_history`, {
+        const res = await axios.get("http://localhost:8000/api/shared_chat_history", {
           params: { chat_id },
-          withCredentials: true, // remove this if sharing is public
         });
+
         const formatted = res.data.map((m) => ({
           type: m.role === "user" ? "Sender" : "Receiver",
           message: m.content,
         }));
+
         setMessages(formatted);
       } catch (err) {
         console.error("Error loading shared chat:", err);
@@ -29,14 +32,25 @@ const SharedChat = () => {
     fetchChat();
   }, [chat_id]);
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   return (
-    <div className="min-h-screen bg-[#121212] text-white p-6">
-      <h1 className="text-2xl font-bold mb-6">Shared Conversation</h1>
-      {error ? (
-        <p className="text-red-500">{error}</p>
-      ) : (
-        <div className="space-y-4">
-          {messages.map((msg, idx) => (
+    <div className="flex flex-col h-screen bg-white text-black">
+      {/* Header */}
+      <div className="p-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+        <h1 className="text-2xl font-bold">Shared Conversation</h1>
+      </div>
+
+      {/* Chat Body */}
+      <div className="flex-1 px-4 py-6 space-y-4 overflow-y-auto scrollbar-hide">
+        {error ? (
+          <p className="text-red-500">{error}</p>
+        ) : messages.length === 0 ? (
+          <p className="text-gray-400">No messages in this conversation.</p>
+        ) : (
+          messages.map((msg, idx) => (
             <div
               key={idx}
               className={`flex items-start text-sm ${
@@ -44,21 +58,19 @@ const SharedChat = () => {
               }`}
             >
               {msg.type === "Receiver" && (
-                <img
-                  src={gptImgLogo}
-                  alt="Bot"
-                  className="w-8 h-8 mr-2 rounded"
-                />
+                <div className="w-8 h-8 mr-2 text-black-500">
+                  <BubbleChartIcon />
+                </div>
               )}
+
               <div
-                className={`px-4 py-2 rounded max-w-[70%] whitespace-pre-wrap break-words ${
-                  msg.type === "Sender"
-                    ? "bg-blue-900 text-white"
-                    : "bg-gray-700 text-white"
+                className={`prose break-words max-w-full text-black bg-gray-100 p-3 pr-10 rounded-lg text-base relative ${
+                  msg.type === "Sender" ? "bg-blue-100" : "bg-gray-100"
                 }`}
               >
-                {msg.message}
+                <ReactMarkdown>{msg.message}</ReactMarkdown>
               </div>
+
               {msg.type === "Sender" && (
                 <img
                   src={`https://api.dicebear.com/7.x/initials/svg?seed=Shared`}
@@ -67,9 +79,10 @@ const SharedChat = () => {
                 />
               )}
             </div>
-          ))}
-        </div>
-      )}
+          ))
+        )}
+        <div ref={messagesEndRef} />
+      </div>
     </div>
   );
 };

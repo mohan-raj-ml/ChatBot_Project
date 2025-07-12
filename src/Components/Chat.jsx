@@ -1,9 +1,9 @@
-// Chat.jsx (final working version)
+// Chat.jsx (final with edit feature)
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import gptImgLogo from "../assets/chatgptLogo.svg";
-import { Mic, Paperclip, Send, Copy, Check, Square, X } from "lucide-react";
+import { Mic, Paperclip, Send, Copy, Check, Square, X, Edit3 } from "lucide-react";
 import { BubbleChart } from "@mui/icons-material";
 
 const Chat = ({
@@ -21,10 +21,10 @@ const Chat = ({
   const [controller, setController] = useState(null);
   const [attachedFile, setAttachedFile] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [editingIndex, setEditingIndex] = useState(null);
 
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
-
   const user = JSON.parse(localStorage.getItem("user"));
   const username = user?.username || "Guest";
   const userAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${username}`;
@@ -60,18 +60,39 @@ const Chat = ({
       return;
     }
 
-    const newMessage = {
-      type: "Sender",
-      message: typedValue,
-      file: attachedFile ? URL.createObjectURL(attachedFile) : null,
-      fileName: attachedFile?.name || null,
-    };
+    const isEditing = editingIndex !== null;
 
-    setMessageData((prev) => [...prev, newMessage]);
+    if (isEditing) {
+      const newMessage = {
+        type: "Sender",
+        message: typedValue,
+        file: attachedFile ? URL.createObjectURL(attachedFile) : null,
+        fileName: attachedFile?.name || null,
+      };
+
+      const updatedMessages = [...messageData];
+      updatedMessages[editingIndex] = newMessage;
+
+      // Remove the assistant reply immediately after
+      if (updatedMessages[editingIndex + 1]?.type === "Receiver") {
+        updatedMessages.splice(editingIndex + 1, 1);
+      }
+
+      setMessageData(updatedMessages);
+      setEditingIndex(null);
+    } else {
+      const newMessage = {
+        type: "Sender",
+        message: typedValue,
+        file: attachedFile ? URL.createObjectURL(attachedFile) : null,
+        fileName: attachedFile?.name || null,
+      };
+      setMessageData((prev) => [...prev, newMessage]);
+    }
+
     setTypedValue("");
     setHasStarted(true);
     setLoading(true);
-
     const abortController = new AbortController();
     setController(abortController);
 
@@ -113,21 +134,20 @@ const Chat = ({
         withCredentials: true,
       });
       setChatHistory(refreshed.data.chats || []);
-   } catch (err) {
-  if (axios.isCancel(err)) {
-    console.log("Request cancelled by user");
-  } else {
-    console.error("Error generating response:", err);
-    setMessageData((prev) => [
-      ...prev,
-      { type: "Receiver", message: "⚠️ Error getting response." },
-    ]);
-  }
-}
- finally {
+    } catch (err) {
+      if (axios.isCancel(err)) {
+        console.log("Request cancelled by user");
+      } else {
+        console.error("Error generating response:", err);
+        setMessageData((prev) => [
+          ...prev,
+          { type: "Receiver", message: "⚠️ Error getting response." },
+        ]);
+      }
+    } finally {
       setLoading(false);
       setController(null);
-      setAttachedFile(null); // Allow new file selection
+      setAttachedFile(null);
     }
   };
 
@@ -145,6 +165,13 @@ const Chat = ({
     setTimeout(() => setCopiedIndex(null), 1500);
   };
 
+  const handleEdit = (index) => {
+    const msg = messageData[index];
+    setTypedValue(msg.message);
+    setAttachedFile(null);
+    setEditingIndex(index);
+  };
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -157,24 +184,20 @@ const Chat = ({
       alert("Voice recognition not supported in this browser.");
       return;
     }
-
     const recognition = new window.webkitSpeechRecognition();
     recognition.lang = "en-US";
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-
     recognition.onstart = () => setIsRecording(true);
     recognition.onend = () => setIsRecording(false);
     recognition.onerror = (e) => {
       setIsRecording(false);
       console.error("Speech recognition error:", e);
     };
-
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
       setTypedValue((prev) => prev + " " + transcript);
     };
-
     recognition.start();
   };
 
@@ -199,45 +222,56 @@ const Chat = ({
               key={idx}
               className={`flex ${msg.type === "Sender" ? "justify-end" : "justify-start"}`}
             >
-              <div className="flex items-start max-w-[85%] relative">
-                {msg.type === "Sender" ? (
-                  <img src={userAvatar} className="w-8 h-8 rounded-full ml-2 order-2" />
-                ) : (
-                  <BubbleChart className="w-8 h-8 mr-2 text-black dark:text-white" />
-                )}
-                <div
-                  className={`prose dark:prose-invert break-words max-w-full text-gray-900 dark:text-white pr-16 ${
-                    msg.type === "Sender"
-                      ? "bg-indigo-100 dark:bg-gray-700"
-                      : "bg-gray-100 dark:bg-gray-800"
-                  } p-3 rounded-lg text-base relative`}
-                >
-                  <ReactMarkdown>{msg.message}</ReactMarkdown>
-                  {msg.file && (
-                    <div className="mt-2">
-                      {msg.fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
-                        <img src={msg.file} alt="attached" className="w-40 rounded mt-2" />
-                      ) : (
-                        <a
-                          href={msg.file}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-600 underline"
-                        >
-                          {msg.fileName}
-                        </a>
-                      )}
-                    </div>
+              <div className="flex flex-col items-end max-w-[85%] relative">
+                <div className="flex items-start">
+                  {msg.type === "Sender" ? (
+                    <img src={userAvatar} className="w-8 h-8 rounded-full ml-2 order-2" />
+                  ) : (
+                    <BubbleChart className="w-8 h-8 mr-2 text-black dark:text-white" />
                   )}
-                  <div className="absolute top-1.5 right-1.5">
-                    <button
-                      className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-white"
-                      onClick={() => handleCopy(msg.message, idx)}
-                    >
-                      {copiedIndex === idx ? <Check size={14} /> : <Copy size={14} />}
-                    </button>
+                  <div
+                    className={`prose dark:prose-invert break-words max-w-full text-gray-900 dark:text-white pr-16 ${
+                      msg.type === "Sender"
+                        ? "bg-indigo-100 dark:bg-gray-700"
+                        : "bg-gray-100 dark:bg-gray-800"
+                    } p-3 rounded-lg text-base relative`}
+                  >
+                    <ReactMarkdown>{msg.message}</ReactMarkdown>
+                    {msg.file && (
+                      <div className="mt-2">
+                        {msg.fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                          <img src={msg.file} alt="attached" className="w-40 rounded mt-2" />
+                        ) : (
+                          <a
+                            href={msg.file}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-600 underline"
+                          >
+                            {msg.fileName}
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    <div className="absolute top-1.5 right-1.5">
+                      <button
+                        className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-white"
+                        onClick={() => handleCopy(msg.message, idx)}
+                      >
+                        {copiedIndex === idx ? <Check size={14} /> : <Copy size={14} />}
+                      </button>
+                    </div>
                   </div>
                 </div>
+                {msg.type === "Sender" && (
+                  <button
+                    onClick={() => handleEdit(idx)}
+                    className="mt-1 text-gray-500 hover:text-blue-600 text-xs flex items-center space-x-1"
+                  >
+                    <Edit3 size={14} />
+                    <span>Edit</span>
+                  </button>
+                )}
               </div>
             </div>
           ))
@@ -267,7 +301,6 @@ const Chat = ({
                 : "bg-white dark:bg-gray-800"
             }`}
           >
-            {/* File input */}
             <label className="p-3 text-gray-500 cursor-pointer">
               <Paperclip size={16} />
               <input
@@ -278,8 +311,6 @@ const Chat = ({
                 onChange={handleFileChange}
               />
             </label>
-
-            {/* Textarea */}
             <textarea
               rows={1}
               className="custom-scrollbar flex-1 resize-none py-3 px-1 bg-transparent outline-none max-h-32 text-base text-gray-900 dark:text-white overflow-y-auto"
@@ -302,8 +333,6 @@ const Chat = ({
                 }
               }}
             />
-
-            {/* Send/Stop/Mic */}
             <div className="flex p-2">
               {loading ? (
                 <button
@@ -338,8 +367,6 @@ const Chat = ({
               )}
             </div>
           </div>
-
-          {/* Preview attached file */}
           {attachedFile && (
             <div className="flex justify-between mt-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-3 py-2 rounded">
               <span>{attachedFile.name}</span>
@@ -348,7 +375,6 @@ const Chat = ({
               </button>
             </div>
           )}
-
           {disableInput && (
             <p className="text-center text-xs text-red-500 mt-2">
               Please select a model to send messages.

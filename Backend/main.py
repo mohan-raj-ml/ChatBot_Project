@@ -147,6 +147,15 @@ def chat_history(chat_id: int, request: Request):
     messages = db.execute("SELECT role, content FROM messages WHERE chat_id = ? ORDER BY timestamp ASC", (chat_id,)).fetchall()
     return [dict(row) for row in messages]
 
+
+
+@app.get("/api/shared_chat_history")
+def shared_chat_history(chat_id: int):
+    db = get_db()
+    messages = db.execute("SELECT role, content FROM messages WHERE chat_id = ? ORDER BY timestamp ASC", (chat_id,)).fetchall()
+    return [dict(row) for row in messages]
+
+
 @app.post("/api/create_chat")
 def create_chat(req: ChatRequest, request: Request):
     username = request.session.get("user")
