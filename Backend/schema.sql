@@ -26,3 +26,9 @@ CREATE TABLE IF NOT EXISTS chat_memory (
     memory TEXT,
     FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS chat_summaries (
+    chat_id INTEGER PRIMARY KEY,
+    summary TEXT,
+    FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+);

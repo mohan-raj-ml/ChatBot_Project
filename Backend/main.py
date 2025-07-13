@@ -1,3 +1,4 @@
+# main.py
 from fastapi import FastAPI, Request, HTTPException, UploadFile, Form, File
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,11 +12,22 @@ import os
 import io
 from pptx import Presentation
 import asyncio
+import logging
 
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 from langchain.llms.base import LLM
-from langchain_core.runnables import RunnableSequence # Keep this if you use it elsewhere, otherwise LLMChain is fine
+from langchain.chains.summarize import load_summarize_chain
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.docstore.document import Document
+
+# Assuming vector_store.py is in the same directory and contains the updated functions
+from vector_store import get_faiss_index, save_faiss_index, embedding_model as global_embedding_model
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 
 app = FastAPI()
 
@@ -29,8 +41,8 @@ app.add_middleware(
 
 app.add_middleware(
     SessionMiddleware,
-    secret_key="supersecretkey",
-    max_age=60 * 60 * 24 * 4,
+    secret_key="supersecretkey", # IMPORTANT: Use a strong, truly secret key in production
+    max_age=60 * 60 * 24 * 4, # 4 days
     same_site="lax",
     session_cookie="session"
 )
@@ -39,26 +51,39 @@ DB_NAME = 'users.db'
 
 def get_db():
     conn = sqlite3.connect(DB_NAME, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    conn.row_factory = sqlite3.Row # Allows accessing columns by name
+    conn.execute("PRAGMA foreign_keys = ON") # Enforce foreign key constraints
     return conn
 
 def init_db():
     with sqlite3.connect(DB_NAME) as db:
         db.execute("PRAGMA foreign_keys = ON")
-        with open('schema.sql', 'r') as f:
-            db.executescript(f.read())
+        # Check if schema.sql exists and execute it
+        if os.path.exists('schema.sql'):
+            with open('schema.sql', 'r') as f:
+                db.executescript(f.read())
+            logger.info("Database schema initialized successfully.")
+        else:
+            logger.warning("schema.sql not found. Database schema might not be initialized.")
 
 class OllamaLLM(LLM):
-    model: str = "mistral"
+    model: str = "mistral" # Default model, can be overridden
 
     def _call(self, prompt: str, stop=None):
-        res = requests.post("http://localhost:11434/api/generate", json={
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False
-        })
-        return res.json().get("response", "")
+        try:
+            res = requests.post("http://localhost:11434/api/generate", json={
+                "model": self.model,
+                "prompt": prompt,
+                "stream": False
+            }, timeout=300) # Added timeout for robustness
+            res.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
+            return res.json().get("response", "").strip() # .strip() response
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error communicating with Ollama server ({self.model}): {e}")
+            raise HTTPException(status_code=503, detail=f"Failed to connect to Ollama model '{self.model}'. Please ensure it's running.")
+        except Exception as e:
+            logger.error(f"Unexpected error in OllamaLLM call: {e}")
+            raise HTTPException(status_code=500, detail=f"LLM generation failed: {e}")
 
     @property
     def _identifying_params(self):
@@ -72,7 +97,7 @@ class User(BaseModel):
     username: str
     password: str
 
-class PromptRequest(BaseModel):
+class PromptRequest(BaseModel): # This model isn't used directly in /api/respond, but good for clarity
     prompt: str
     model: str
     chat_id: int
@@ -84,8 +109,6 @@ class RenameChatRequest(BaseModel):
     chat_id: int
     new_title: str
 
-
-
 @app.post("/signup")
 def signup(user: User):
     db = get_db()
@@ -93,23 +116,33 @@ def signup(user: User):
         db.execute("INSERT INTO users (username, password) VALUES (?, ?)",
                    (user.username.strip(), user.password.strip()))
         db.commit()
+        logger.info(f"User {user.username} signed up successfully.")
         return {"success": True, "message": "Signup successful."}
     except sqlite3.IntegrityError:
+        logger.warning(f"Signup failed: Username {user.username} already exists.")
         raise HTTPException(status_code=409, detail="Username already exists.")
+    except Exception as e:
+        logger.exception("Error during signup process.")
+        raise HTTPException(status_code=500, detail="Internal server error during signup.")
+
 
 @app.post("/login")
 async def login(user: User, request: Request):
     db = get_db()
     result = db.execute("SELECT * FROM users WHERE username = ? AND password = ?",
-                        (user.username, user.password)).fetchone()
+                         (user.username, user.password)).fetchone()
     if result:
         request.session['user'] = user.username
+        logger.info(f"User {user.username} logged in successfully.")
         return {"success": True, "message": "Login successful."}
+    logger.warning(f"Login failed for user {user.username}: Invalid credentials.")
     raise HTTPException(status_code=401, detail="Invalid credentials.")
 
 @app.post("/logout")
 async def logout(request: Request):
+    user = request.session.get("user", "unknown")
     request.session.clear()
+    logger.info(f"User {user} logged out successfully.")
     return {"success": True, "message": "Logged out successfully."}
 
 @app.get("/")
@@ -122,11 +155,17 @@ def index(request: Request):
 @app.get("/api/get_models")
 def get_models():
     try:
-        res = requests.get("http://localhost:11434/api/tags")
+        res = requests.get("http://localhost:11434/api/tags", timeout=10) # Added timeout
+        res.raise_for_status()
         models = [m['name'] for m in res.json().get("models", [])]
+        logger.info(f"Successfully retrieved Ollama models: {models}")
         return {"response": [models]}
-    except:
-        return {"response": [[]]}
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching Ollama models: {e}")
+        return {"response": [[]], "error": "Could not connect to Ollama server."}
+    except Exception as e:
+        logger.exception("Unexpected error fetching Ollama models.")
+        return {"response": [[]], "error": f"An unexpected error occurred: {e}"}
 
 @app.get("/api/list_chats")
 def list_chats(request: Request):
@@ -135,6 +174,10 @@ def list_chats(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     db = get_db()
     user = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+    if not user:
+        logger.warning(f"User {username} not found in DB but in session. Session cleared.")
+        request.session.clear() # Invalidate session if user isn't found
+        raise HTTPException(status_code=401, detail="Unauthorized: User profile missing.")
     chats = db.execute("SELECT id, title, created_at FROM chats WHERE user_id = ? ORDER BY created_at DESC", (user["id"],)).fetchall()
     return {"chats": [dict(row) for row in chats]}
 
@@ -144,15 +187,23 @@ def chat_history(chat_id: int, request: Request):
     if not username:
         raise HTTPException(status_code=401, detail="Unauthorized")
     db = get_db()
+    # Optional: Verify chat_id belongs to the user for security
+    user_id = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()["id"]
+    chat_owner = db.execute("SELECT user_id FROM chats WHERE id = ?", (chat_id,)).fetchone()
+    if not chat_owner or chat_owner["user_id"] != user_id:
+        logger.warning(f"Unauthorized access attempt to chat_id {chat_id} by user {username}.")
+        raise HTTPException(status_code=403, detail="Forbidden: Chat does not belong to user.")
+
     messages = db.execute("SELECT role, content FROM messages WHERE chat_id = ? ORDER BY timestamp ASC", (chat_id,)).fetchall()
     return [dict(row) for row in messages]
 
-
-
 @app.get("/api/shared_chat_history")
 def shared_chat_history(chat_id: int):
+    # This endpoint is public for sharing, no auth check needed here.
     db = get_db()
     messages = db.execute("SELECT role, content FROM messages WHERE chat_id = ? ORDER BY timestamp ASC", (chat_id,)).fetchall()
+    if not messages:
+        raise HTTPException(status_code=404, detail="Chat not found or empty.")
     return [dict(row) for row in messages]
 
 
@@ -163,12 +214,26 @@ def create_chat(req: ChatRequest, request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     db = get_db()
     user = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
-    db.execute("INSERT INTO chats (user_id, title) VALUES (?, ?)", (user["id"], req.title))
-    db.commit()
-    chat_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-    db.execute("INSERT INTO chat_memory (chat_id, memory) VALUES (?, ?)", (chat_id, ""))
-    db.commit()
-    return {"success": True, "chat_id": chat_id, "title": req.title}
+    if not user:
+        logger.warning(f"User {username} not found when creating chat. Session cleared.")
+        request.session.clear()
+        raise HTTPException(status_code=401, detail="Unauthorized: User profile missing.")
+
+    try:
+        db.execute("INSERT INTO chats (user_id, title) VALUES (?, ?)", (user["id"], req.title))
+        db.commit()
+        chat_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        # Initialize chat_memory and chat_summaries entries
+        db.execute("INSERT INTO chat_memory (chat_id, memory) VALUES (?, ?)", (chat_id, ""))
+        db.execute("INSERT INTO chat_summaries (chat_id, summary) VALUES (?, ?)", (chat_id, ""))
+        db.commit()
+        logger.info(f"New chat '{req.title}' created with ID {chat_id} for user {username}.")
+        return {"success": True, "chat_id": chat_id, "title": req.title}
+    except Exception as e:
+        logger.exception(f"Error creating chat for user {username}.")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to create chat.")
+
 
 @app.post("/api/rename_chat")
 def rename_chat(req: RenameChatRequest, request: Request):
@@ -176,9 +241,23 @@ def rename_chat(req: RenameChatRequest, request: Request):
     if not username:
         raise HTTPException(status_code=401, detail="Unauthorized")
     db = get_db()
-    db.execute("UPDATE chats SET title = ? WHERE id = ?", (req.new_title, req.chat_id))
-    db.commit()
-    return {"success": True}
+    try:
+        # Optional: Verify chat_id belongs to the user for security
+        user_id = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()["id"]
+        chat_owner = db.execute("SELECT user_id FROM chats WHERE id = ?", (req.chat_id,)).fetchone()
+        if not chat_owner or chat_owner["user_id"] != user_id:
+            logger.warning(f"Unauthorized rename attempt to chat_id {req.chat_id} by user {username}.")
+            raise HTTPException(status_code=403, detail="Forbidden: Chat does not belong to user.")
+
+        db.execute("UPDATE chats SET title = ? WHERE id = ? WHERE user_id = ?", (req.new_title, req.chat_id, user_id))
+        db.commit()
+        logger.info(f"Chat {req.chat_id} renamed to '{req.new_title}' by user {username}.")
+        return {"success": True}
+    except Exception as e:
+        logger.exception(f"Error renaming chat {req.chat_id} for user {username}.")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to rename chat.")
+
 
 @app.post("/api/respond")
 async def respond(
@@ -193,108 +272,208 @@ async def respond(
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     db = get_db()
-    assistant_message_id = None # Initialize to None
+    current_user_id = None
+    try:
+        current_user_id = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()["id"]
+        chat_owner = db.execute("SELECT user_id FROM chats WHERE id = ?", (chat_id,)).fetchone()
+        if not chat_owner or chat_owner["user_id"] != current_user_id:
+            logger.warning(f"Unauthorized access attempt to chat_id {chat_id} by user {username} during respond.")
+            raise HTTPException(status_code=403, detail="Forbidden: Chat does not belong to user.")
+    except Exception as e:
+        logger.exception(f"Authentication/Authorization error for user {username} on chat {chat_id}.")
+        raise HTTPException(status_code=401, detail="Unauthorized or invalid chat.")
+
 
     try:
-        # Save user's new message immediately
+        # 1. Insert User Message
         db.execute("INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)", (chat_id, "user", prompt))
         db.commit()
+        logger.info(f"User message added to chat {chat_id} by {username}.")
 
-        # Rebuild full context for this chat
-        messages = db.execute("SELECT role, content FROM messages WHERE chat_id = ? ORDER BY timestamp ASC", (chat_id,)).fetchall()
-        context = "\n".join([f"{m['role'].capitalize()}: {m['content']}" for m in messages])
+        # 2. Fetch Chat History (including the new user message)
+        messages_raw = db.execute("SELECT role, content FROM messages WHERE chat_id = ? ORDER BY timestamp ASC", (chat_id,)).fetchall()
+        messages = [dict(m) for m in messages_raw] # Convert Row objects to dictionaries
+        logger.debug(f"Fetched {len(messages)} messages for chat {chat_id}.")
 
-        # Add file text if present
+        # 3. Get Chat Summary
+        summary_row = db.execute("SELECT summary FROM chat_summaries WHERE chat_id = ?", (chat_id,)).fetchone()
+        summary = summary_row["summary"] if summary_row and summary_row["summary"] else "No prior summary available."
+        logger.debug(f"Current summary for chat {chat_id}: '{summary[:50]}...'")
+
+
+        # 4. Process File Content (if any)
         file_text = ""
-        if file and file.filename.endswith(".pptx"):
-            file_bytes = await file.read()
-            prs = Presentation(io.BytesIO(file_bytes))
-            for slide in prs.slides:
-                for shape in slide.shapes:
-                    if hasattr(shape, "text"):
-                        file_text += shape.text + "\n"
-            context += f"\n[File Content from '{file.filename}']:\n{file_text.strip()}"
+        if file and file.filename:
+            logger.info(f"Processing uploaded file: {file.filename}")
+            if file.filename.lower().endswith(".pptx"):
+                try:
+                    file_bytes = await file.read()
+                    prs = Presentation(io.BytesIO(file_bytes))
+                    for slide in prs.slides:
+                        for shape in slide.shapes:
+                            if hasattr(shape, "text"):
+                                file_text += shape.text + "\n"
+                    if not file_text.strip():
+                        logger.warning(f"PPTX file {file.filename} contained no readable text.")
+                        file_text = f"The provided '{file.filename}' contained no extractable text."
+                    else:
+                         logger.info(f"Extracted {len(file_text)} characters from {file.filename}.")
+                except Exception as e:
+                    logger.error(f"Error processing PPTX file {file.filename}: {e}")
+                    file_text = f"Error: Could not process '{file.filename}'. Details: {e}"
+            else:
+                logger.warning(f"Unsupported file type uploaded: {file.filename}. Only .pptx is supported.")
+                file_text = f"Unsupported file type: '{file.filename}'. Only PowerPoint files (.pptx) are processed."
+        elif file and not file.filename: # Handle cases where file might be empty but present
+             logger.warning("Received an empty file upload (no filename).")
 
-        # 🧠 DEBUG PRINT CONTEXT
-        print("------ PROMPT CONTEXT BEGIN ------")
-        print(context)
-        print("------ PROMPT CONTEXT END --------")
 
-        # Use LLM to generate a reply
+        # 5. Integrate with FAISS (Vector Store)
+        try:
+            # Ensure global_embedding_model is not None before passing
+            if global_embedding_model is None:
+                raise RuntimeError("Embedding model is not initialized. Cannot use FAISS.")
+
+            faiss_index = get_faiss_index(chat_id)
+            faiss_index.add_documents([Document(page_content=prompt)])
+            save_faiss_index(faiss_index, chat_id)
+            logger.debug(f"FAISS index updated with current prompt for chat {chat_id}.")
+
+            retrieved_docs = faiss_index.similarity_search(prompt, k=3)
+            retrieved = "\n".join([doc.page_content for doc in retrieved_docs]) if retrieved_docs else "No relevant information retrieved from vector store."
+            logger.debug(f"Retrieved {len(retrieved_docs)} docs from FAISS.")
+        except Exception as e:
+            logger.error(f"Error interacting with FAISS for chat {chat_id}: {e}")
+            retrieved = f"Error retrieving context from vector store: {e}"
+
+
+        # 6. Prepare Recent Chat History
+        recent_messages_for_context = messages[-10:] if len(messages) > 10 else messages
+        # Exclude the very last user message if we just added it, unless it's the only message.
+        # This is to avoid redundancy in the 'Recent Chat' section since 'User: {prompt}' is explicit.
+        if len(recent_messages_for_context) > 0 and recent_messages_for_context[-1].get("role") == "user" and recent_messages_for_context[-1].get("content") == prompt:
+             recent_messages_for_context = recent_messages_for_context[:-1]
+
+        recent_str = "\n".join([f"{m['role'].capitalize()}: {m['content']}" for m in recent_messages_for_context])
+        if not recent_str.strip() and len(messages) > 1: # Only if messages exist beyond the current one
+            recent_str = "No recent chat context beyond the current turn."
+        elif len(messages) == 1:
+            recent_str = "This is the start of the conversation."
+
+        # 7. Construct the Full Context Prompt for LLM
+        context_parts = [
+            f"Existing Chat Summary:\n{summary}",
+            f"Relevant Information:\n{retrieved}",
+            f"Recent Chat History:\n{recent_str}",
+        ]
+        if file_text.strip():
+            context_parts.append(f"Content from uploaded file (filename: {file.filename or 'N/A'}):\n{file_text.strip()}")
+
+        # Ensure the prompt always ends with the current user's prompt and "Assistant:"
+        full_context = "\n\n".join(context_parts) + f"\n\nUser: {prompt}\nAssistant:"
+
+        logger.info("------ PROMPT CONTEXT BEGIN ------")
+        logger.info(full_context)
+        logger.info("------ PROMPT CONTEXT END --------")
+
+        # 8. Get LLM Response
         llm = OllamaLLM(model=model)
-        prompt_template = PromptTemplate.from_template("{context}\nAssistant:")
-        chain = prompt_template | llm # Using RunnableSequence syntax
-
-        assistant_response = "" # Initialize empty string for response
+        prompt_template = PromptTemplate.from_template("{context}") # Use {context} as the full prompt
+        chain = prompt_template | llm
 
         try:
-            assistant_response = chain.invoke({"context": context})
+            assistant_response = chain.invoke({"context": full_context})
+            if not assistant_response.strip():
+                assistant_response = "I'm sorry, I couldn't generate a response. Please try again."
+                logger.warning(f"LLM returned an empty response for chat {chat_id}.")
+        except Exception as e:
+            logger.error(f"Error during LLM inference for chat {chat_id}: {e}")
+            assistant_response = f"I apologize, but there was an error generating a response: {e}"
+            # Re-raise the HTTP exception from OllamaLLM if it was already caught there
+            if isinstance(e, HTTPException):
+                raise
 
-            # Introduce a tiny delay to allow the event loop to process client disconnection.
-            await asyncio.sleep(0.01) # A very small non-blocking sleep
+        # Check for client disconnection before committing response
+        await asyncio.sleep(0.01) # Small pause for async check
+        if await request.is_disconnected():
+            logger.warning(f"Client disconnected for chat {chat_id} after AI generation. Response not saved.")
+            return JSONResponse(status_code=200, content={"response": ""}) # Return empty response if disconnected
 
-            # Check if the client is still connected BEFORE saving.
-            if await request.is_disconnected():
-                print(f"Client disconnected after LLM generation for chat {chat_id}. Not saving assistant response.")
-                return JSONResponse(status_code=200, content={"response": ""})
 
-            # If client is still connected and response is not empty, save it.
-            if assistant_response.strip():
-                db.execute("INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)", (chat_id, "assistant", assistant_response))
-                db.commit()
-                assistant_message_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        # 9. Insert Assistant Message
+        if assistant_response.strip():
+            db.execute("INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)", (chat_id, "assistant", assistant_response))
+            db.commit()
+            logger.info(f"Assistant response saved for chat {chat_id}.")
 
-            # Auto-generate title if this is the first exchange (1 user + 1 assistant)
-            msg_count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id = ?", (chat_id,)).fetchone()[0]
-            if msg_count == 2: # This means 1 user message + 1 assistant message
-                # Use a more specific prompt for title generation
+        # 10. Periodically Summarize Chat
+        msg_count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id = ?", (chat_id,)).fetchone()[0]
+        if msg_count >= 10 and msg_count % 10 == 0: # Summarize every 10 messages (adjust as needed)
+            logger.info(f"Initiating summarization for chat {chat_id} (message count: {msg_count}).")
+            full_chat_for_summary = "\n".join([f"{m['role'].capitalize()}: {m['content']}" for m in messages]) # Use full history for summary
+            if full_chat_for_summary.strip():
+                text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0) # Adjust chunk_size/overlap if needed
+                docs = [doc for doc in text_splitter.create_documents([full_chat_for_summary]) if doc.page_content.strip()]
+                if docs:
+                    try:
+                        summarize_llm = OllamaLLM(model=model) # Use the chosen model for summarization
+                        summary_chain = load_summarize_chain(summarize_llm, chain_type="stuff")
+                        new_summary = summary_chain.run(docs).strip()
+                        if new_summary:
+                            db.execute("INSERT OR REPLACE INTO chat_summaries (chat_id, summary) VALUES (?, ?)", (chat_id, new_summary))
+                            db.commit()
+                            logger.info(f"✅ Summary updated for chat {chat_id}")
+                        else:
+                            logger.warning(f"Summarization returned an empty string for chat {chat_id}.")
+                    except Exception as e:
+                        logger.error(f"❌ Summarization error for chat {chat_id}: {e}")
+                else:
+                    logger.warning(f"⚠️ Skipping summarization: no valid documents generated from chat history for chat {chat_id}.")
+            else:
+                logger.warning(f"⚠️ Skipping summarization: full chat history is empty for chat {chat_id}.")
+
+        # 11. Title Generation for New Chats (after the first user message + assistant response)
+        # Check if this is the first assistant response in a new chat
+        # The 'messages' list already includes the user's latest prompt.
+        # If the total message count is 2 (user + assistant), then it's the first turn.
+        if msg_count == 2 and messages[0].get("role") == "user":
+            logger.info(f"Attempting title generation for new chat {chat_id}.")
+            try:
                 title_prompt_template = PromptTemplate.from_template(
-                    "Generate only one short and clear title (maximum 5 words) for this conversation based on the user's first message below.\n"
-                    "Respond with only the title and nothing else, without quotes.\n\n"
-                    "User Message:\n\"{prompt}\"\n\nTitle:"
+                    "Based on this first user message, generate a short, descriptive title (max 7 words) for the chat. Respond only with the title, no extra text:\n\nUser: {first_user_message}\n\nTitle:"
                 )
                 title_llm = OllamaLLM(model=model)
                 title_chain = title_prompt_template | title_llm
-                try:
-                    title_raw = title_chain.invoke({"prompt": prompt}).strip()
-                    # Further refine title processing
-                    title = title_raw.split("\n")[0].strip().replace('"', '')[:50]
-                    if title: # Only update if a valid title was generated
+                first_user_message_content = messages[0].get("content", "")
+                if first_user_message_content:
+                    raw_title = title_chain.invoke({"first_user_message": first_user_message_content}).strip()
+                    if raw_title:
+                        # Clean the title: take first line, remove quotes, limit length
+                        title = raw_title.split("\n")[0].replace('"', '').replace("Title:", "").strip()[:60]
+                        if not title: # If cleaning resulted in empty string
+                            title = "New Chat" # Fallback title
                         db.execute("UPDATE chats SET title = ? WHERE id = ?", (title, chat_id))
                         db.commit()
-                except Exception as e:
-                    print(f"Title generation failed: {e}")
+                        logger.info(f"Chat {chat_id} titled: '{title}'.")
+                    else:
+                        logger.warning(f"Title generation returned empty string for chat {chat_id}.")
+                else:
+                    logger.warning(f"First user message content was empty for title generation in chat {chat_id}.")
+            except Exception as e:
+                logger.error(f"⚠️ Title generation failed for chat {chat_id}: {e}")
+                # You might want to update the title to a generic one if generation fails
+                db.execute("UPDATE chats SET title = ? WHERE id = ?", ("Unnamed Chat", chat_id))
+                db.commit()
 
-        except Exception as e:
-            # This 'except' block catches errors directly from LLM generation itself
-            print(f"LLM generation failed for chat {chat_id}: {e}")
-            return JSONResponse(status_code=200, content={"response": ""})
 
-        finally:
-            # THIS IS THE KEY ADDITION FOR YOUR "NEW" CODE
-            # If a response was generated AND potentially saved, AND the client is now disconnected,
-            # we consider it a 'stopped' response that wasn't fully delivered.
-            if assistant_message_id and await request.is_disconnected():
-                print(f"Client disconnected AFTER potential save of assistant message ID {assistant_message_id} for chat {chat_id}. Attempting to delete.")
-                try:
-                    db.execute("DELETE FROM messages WHERE id = ?", (assistant_message_id,))
-                    db.commit()
-                    print(f"Successfully deleted assistant message ID {assistant_message_id}.")
-                    # If we deleted it, ensure the frontend gets an empty response
-                    return JSONResponse(status_code=200, content={"response": ""})
-                except Exception as delete_e:
-                    print(f"Error deleting message ID {assistant_message_id}: {delete_e}")
-                    # Even if delete fails, still try to return empty response
-                    return JSONResponse(status_code=200, content={"response": ""})
-
-        # Return the response to the frontend only if it was successfully generated and not aborted
         return JSONResponse(content={"response": assistant_response})
 
+    except HTTPException: # Re-raise HTTPExceptions (like from OllamaLLM or auth checks)
+        raise
     except Exception as e:
-        # This catches broader errors outside the LLM generation block (e.g., DB issues, file processing)
-        print(f"General error in /api/respond endpoint for user {username}: {e}")
-        db.rollback() # Rollback any pending transactions for this request
-        return JSONResponse(status_code=500, content={"response": "\u26a0\ufe0f Internal server error."})
+        logger.exception(f"Unhandled error in /api/respond endpoint for user {username}, chat {chat_id}.")
+        db.rollback() # Rollback any pending database changes
+        return JSONResponse(status_code=500, content={"response": f"❗ Internal error occurred: {e}"})
 
 
 @app.post("/api/delete_chat")
@@ -303,10 +482,32 @@ def delete_chat(chat_id: int, request: Request):
     if not username:
         raise HTTPException(status_code=401, detail="Unauthorized")
     db = get_db()
-    db.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
-    db.execute("DELETE FROM chat_memory WHERE chat_id = ?", (chat_id,))
-    db.commit()
-    return {"success": True}
+    try:
+        # Verify ownership before deleting
+        user_id = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()["id"]
+        chat_owner = db.execute("SELECT user_id FROM chats WHERE id = ?", (chat_id,)).fetchone()
+        if not chat_owner or chat_owner["user_id"] != user_id:
+            logger.warning(f"Unauthorized delete attempt to chat_id {chat_id} by user {username}.")
+            raise HTTPException(status_code=403, detail="Forbidden: Chat does not belong to user.")
+
+        db.execute("DELETE FROM messages WHERE chat_id = ?", (chat_id,))
+        db.execute("DELETE FROM chat_memory WHERE chat_id = ?", (chat_id,)) # If you use chat_memory table
+        db.execute("DELETE FROM chat_summaries WHERE chat_id = ?", (chat_id,))
+        db.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
+        db.commit()
+        logger.info(f"Chat {chat_id} and its associated data deleted by user {username}.")
+
+        # Clean up FAISS index files
+        faiss_dir = f"faiss_indexes/chat_{chat_id}"
+        if os.path.exists(faiss_dir):
+            shutil.rmtree(faiss_dir)
+            logger.info(f"Deleted FAISS index directory: {faiss_dir}")
+
+        return {"success": True}
+    except Exception as e:
+        logger.exception(f"Error deleting chat {chat_id} for user {username}.")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete chat.")
 
 @app.options("/{rest_of_path:path}")
 async def preflight(rest_of_path: str):
