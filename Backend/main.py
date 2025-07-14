@@ -28,6 +28,15 @@ from vector_store import get_faiss_index, save_faiss_index, embedding_model as g
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+llm_cache = {}
+
+def get_llm(model: str):
+    if model not in llm_cache:
+        llm_cache[model] = OllamaLLM(model=model)
+    return llm_cache[model]
+
+
+faiss_cache = {}
 
 app = FastAPI()
 
@@ -334,12 +343,15 @@ async def respond(
             if global_embedding_model is None:
                 raise RuntimeError("Embedding model is not initialized. Cannot use FAISS.")
 
-            faiss_index = get_faiss_index(chat_id)
-            faiss_index.add_documents([Document(page_content=prompt)])
-            save_faiss_index(faiss_index, chat_id)
-            logger.debug(f"FAISS index updated with current prompt for chat {chat_id}.")
+            if chat_id not in faiss_cache:
+                faiss_cache[chat_id] = get_faiss_index(chat_id)
+            faiss_index = faiss_cache[chat_id]
+            if prompt.strip():
+                faiss_index.add_documents([Document(page_content=prompt)])
+                save_faiss_index(faiss_index, chat_id)
+                logger.debug(f"FAISS index updated with current prompt for chat {chat_id}.")
 
-            retrieved_docs = faiss_index.similarity_search(prompt, k=3)
+            retrieved_docs = faiss_index.max_marginal_relevance_search(prompt, k=5, fetch_k=15, lambda_mult=0.7)
             retrieved = "\n".join([doc.page_content for doc in retrieved_docs]) if retrieved_docs else "No relevant information retrieved from vector store."
             logger.debug(f"Retrieved {len(retrieved_docs)} docs from FAISS.")
         except Exception as e:
@@ -361,23 +373,38 @@ async def respond(
             recent_str = "This is the start of the conversation."
 
         # 7. Construct the Full Context Prompt for LLM
-        context_parts = [
-            f"Existing Chat Summary:\n{summary}",
-            f"Relevant Information:\n{retrieved}",
-            f"Recent Chat History:\n{recent_str}",
-        ]
-        if file_text.strip():
-            context_parts.append(f"Content from uploaded file (filename: {file.filename or 'N/A'}):\n{file_text.strip()}")
+        file_section = f"Content from uploaded file (filename: {file.filename or 'N/A'}):\n{file_text.strip()}" if file_text.strip() else ""
 
-        # Ensure the prompt always ends with the current user's prompt and "Assistant:"
-        full_context = "\n\n".join(context_parts) + f"\n\nUser: {prompt}\nAssistant:"
+        context_template = PromptTemplate.from_template("""
+        Existing Chat Summary:
+        {summary}
+
+        Relevant Information:
+        {retrieved}
+
+        Recent Chat History:
+        {recent}
+
+        {file_section}
+
+        User: {prompt}
+        Assistant:""")
+
+        full_context = context_template.format_prompt(
+            summary=summary,
+            retrieved=retrieved,
+            recent=recent_str,
+            file_section=file_section,
+            prompt=prompt
+        ).to_string()
+
 
         logger.info("------ PROMPT CONTEXT BEGIN ------")
         logger.info(full_context)
         logger.info("------ PROMPT CONTEXT END --------")
 
         # 8. Get LLM Response
-        llm = OllamaLLM(model=model)
+        llm = get_llm(model)
         prompt_template = PromptTemplate.from_template("{context}") # Use {context} as the full prompt
         chain = prompt_template | llm
 
@@ -416,7 +443,7 @@ async def respond(
                 docs = [doc for doc in text_splitter.create_documents([full_chat_for_summary]) if doc.page_content.strip()]
                 if docs:
                     try:
-                        summarize_llm = OllamaLLM(model=model) # Use the chosen model for summarization
+                        summarize_llm = get_llm(model) # Use the chosen model for summarization
                         summary_chain = load_summarize_chain(summarize_llm, chain_type="stuff")
                         new_summary = summary_chain.run(docs).strip()
                         if new_summary:
@@ -439,11 +466,15 @@ async def respond(
         if msg_count == 2 and messages[0].get("role") == "user":
             logger.info(f"Attempting title generation for new chat {chat_id}.")
             try:
-                title_prompt_template = PromptTemplate.from_template(
-                    "Based on this first user message, generate a short, descriptive title (max 7 words) for the chat. Respond only with the title, no extra text:\n\nUser: {first_user_message}\n\nTitle:"
-                )
-                title_llm = OllamaLLM(model=model)
-                title_chain = title_prompt_template | title_llm
+                title_template = PromptTemplate.from_template("""
+                Generate a short, 2–5 word chat title for this user message.
+
+                User: {first_user_message}
+                Only respond with the title. No quotes or punctuation.
+                """)
+
+                title_chain = title_template | OllamaLLM(model=model)
+
                 first_user_message_content = messages[0].get("content", "")
                 if first_user_message_content:
                     raw_title = title_chain.invoke({"first_user_message": first_user_message_content}).strip()

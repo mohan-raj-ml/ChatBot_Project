@@ -1,11 +1,10 @@
-// Chat.jsx (final with edit feature)
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import gptImgLogo from "../assets/chatgptLogo.svg";
-import { Mic, Paperclip, Send, Copy, Check, Square, X, Edit3 } from "lucide-react";
+import { Mic, Paperclip, Send, Copy, Check, Square, X } from "lucide-react";
 import { BubbleChart } from "@mui/icons-material";
-
+import { Pencil } from "lucide-react";
 const Chat = ({
   selectedModel,
   setChatHistory,
@@ -22,17 +21,14 @@ const Chat = ({
   const [attachedFile, setAttachedFile] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [editingIndex, setEditingIndex] = useState(null);
-
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const user = JSON.parse(localStorage.getItem("user"));
   const username = user?.username || "Guest";
   const userAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${username}`;
-
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messageData, loading]);
-
   useEffect(() => {
     const loadChatHistory = async () => {
       if (!selectedChatId) return;
@@ -52,16 +48,13 @@ const Chat = ({
     };
     loadChatHistory();
   }, [selectedChatId]);
-
   const handleSubmit = async () => {
     if (!typedValue.trim() && !attachedFile) return;
     if (!selectedModel) {
       alert("Please select a model to send messages.");
       return;
     }
-
     const isEditing = editingIndex !== null;
-
     if (isEditing) {
       const newMessage = {
         type: "Sender",
@@ -69,15 +62,11 @@ const Chat = ({
         file: attachedFile ? URL.createObjectURL(attachedFile) : null,
         fileName: attachedFile?.name || null,
       };
-
       const updatedMessages = [...messageData];
       updatedMessages[editingIndex] = newMessage;
-
-      // Remove the assistant reply immediately after
       if (updatedMessages[editingIndex + 1]?.type === "Receiver") {
         updatedMessages.splice(editingIndex + 1, 1);
       }
-
       setMessageData(updatedMessages);
       setEditingIndex(null);
     } else {
@@ -89,13 +78,11 @@ const Chat = ({
       };
       setMessageData((prev) => [...prev, newMessage]);
     }
-
     setTypedValue("");
     setHasStarted(true);
     setLoading(true);
     const abortController = new AbortController();
     setController(abortController);
-
     try {
       let currentChatId = selectedChatId;
       if (!currentChatId) {
@@ -107,7 +94,6 @@ const Chat = ({
         currentChatId = chatRes.data.chat_id;
         setSelectedChatId(currentChatId);
       }
-
       const formData = new FormData();
       formData.append("prompt", typedValue);
       formData.append("model", selectedModel);
@@ -115,13 +101,11 @@ const Chat = ({
       if (attachedFile) {
         formData.append("file", attachedFile);
       }
-
       const res = await axios.post("http://localhost:8000/api/respond", formData, {
         withCredentials: true,
         signal: abortController.signal,
         headers: { "Content-Type": "multipart/form-data" },
       });
-
       if (!abortController.signal.aborted && res.data?.response?.trim()) {
         const assistantMessage = {
           type: "Receiver",
@@ -129,7 +113,6 @@ const Chat = ({
         };
         setMessageData((prev) => [...prev, assistantMessage]);
       }
-
       const refreshed = await axios.get("http://localhost:8000/api/list_chats", {
         withCredentials: true,
       });
@@ -150,7 +133,6 @@ const Chat = ({
       setAttachedFile(null);
     }
   };
-
   const handleStop = () => {
     if (controller) {
       controller.abort();
@@ -158,27 +140,23 @@ const Chat = ({
       setLoading(false);
     }
   };
-
   const handleCopy = (text, index) => {
     navigator.clipboard.writeText(text);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 1500);
   };
-
   const handleEdit = (index) => {
     const msg = messageData[index];
     setTypedValue(msg.message);
     setAttachedFile(null);
     setEditingIndex(index);
   };
-
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
       setAttachedFile(file);
     }
   };
-
   const handleVoiceInput = () => {
     if (!window.webkitSpeechRecognition) {
       alert("Voice recognition not supported in this browser.");
@@ -200,7 +178,6 @@ const Chat = ({
     };
     recognition.start();
   };
-
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-6">
@@ -222,8 +199,8 @@ const Chat = ({
               key={idx}
               className={`flex ${msg.type === "Sender" ? "justify-end" : "justify-start"}`}
             >
-              <div className="flex flex-col items-end max-w-[85%] relative">
-                <div className="flex items-start">
+              <div className="flex flex-col items-end max-w-[85%] relative group">
+                <div className="flex items-start relative">
                   {msg.type === "Sender" ? (
                     <img src={userAvatar} className="w-8 h-8 rounded-full ml-2 order-2" />
                   ) : (
@@ -262,16 +239,19 @@ const Chat = ({
                       </button>
                     </div>
                   </div>
-                </div>
-                {msg.type === "Sender" && (
-                  <button
-                    onClick={() => handleEdit(idx)}
-                    className="mt-1 text-gray-500 hover:text-blue-600 text-xs flex items-center space-x-1"
-                  >
-                    <Edit3 size={14} />
-                    <span>Edit</span>
-                  </button>
+                  {msg.type === "Sender" && (
+                  <div className="absolute -bottom-2 -left-2 group-hover:flex hidden">
+                    <button
+                      onClick={() => handleEdit(idx)}
+                      className="text-gray-400 hover:text-blue-600"
+                      title="Edit message"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  </div>
                 )}
+
+                </div>
               </div>
             </div>
           ))
@@ -290,8 +270,6 @@ const Chat = ({
         )}
         <div ref={chatEndRef} />
       </div>
-
-      {/* Input Box */}
       <div className="p-4 border-t border-black dark:border-gray-700">
         <div className="max-w-4xl mx-auto">
           <div
@@ -385,5 +363,4 @@ const Chat = ({
     </div>
   );
 };
-
 export default Chat;
