@@ -1,5 +1,3 @@
-// Dashboard.js
-
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -10,18 +8,17 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import ShareIcon from "@mui/icons-material/Share";
+import SearchIcon from "@mui/icons-material/Search"; // 🔍 added
 import { BubbleChart } from '@mui/icons-material';
 import {
   Brightness7 as LightIcon,
   Brightness4 as DarkIcon,
 } from "@mui/icons-material";
-
 const Dashboard = () => {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("user"));
   const displayName = user?.username || "Guest";
   const photoURL = `https://api.dicebear.com/7.x/initials/svg?seed=${displayName}`;
-
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
@@ -33,11 +30,11 @@ const Dashboard = () => {
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [theme, setTheme] = useState("light");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
+  const [showSearch, setShowSearch] = useState(false); // 🔍 added
+  const [searchQuery, setSearchQuery] = useState("");
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
   }, [theme]);
-
   useEffect(() => {
     axios
       .get("http://localhost:8000/api/get_models", { withCredentials: true })
@@ -47,13 +44,11 @@ const Dashboard = () => {
         setSelectedModel("");
       })
       .catch((err) => console.error("Error fetching models:", err));
-
     axios
       .get("http://localhost:8000/api/list_chats", { withCredentials: true })
       .then((res) => setChatHistory(res.data.chats || []))
       .catch((err) => console.error("Error loading chat history:", err));
   }, []);
-
   const handleNewChat = async () => {
     try {
       const res = await axios.post(
@@ -72,7 +67,6 @@ const Dashboard = () => {
       console.error("Failed to start new chat:", err);
     }
   };
-
   const handleLogout = async () => {
     try {
       await axios.post("http://localhost:8000/logout", {}, { withCredentials: true });
@@ -82,7 +76,6 @@ const Dashboard = () => {
       console.error("Logout failed:", err);
     }
   };
-
   const handleDeleteChat = async (chatId) => {
     try {
       await axios.post("http://localhost:8000/api/delete_chat", null, {
@@ -95,7 +88,6 @@ const Dashboard = () => {
       console.error("Error deleting chat:", err);
     }
   };
-
   const handleRenameChat = async (chatId) => {
     try {
       await axios.post(
@@ -114,14 +106,12 @@ const Dashboard = () => {
       console.error("Rename failed:", err);
     }
   };
-
   const handleShare = (chatId) => {
     const shareUrl = `${window.location.origin}/share/${chatId}`;
     navigator.clipboard.writeText(shareUrl).then(() => {
       alert("Share link copied to clipboard!");
     });
   };
-
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900 relative">
       <button 
@@ -130,17 +120,16 @@ const Dashboard = () => {
       >
         ☰
       </button>
-
+      {/* Sidebar - your original code, not modified */}
       <div className={`fixed md:relative z-30 h-full w-[270px] overflow-visible bg-white dark:bg-gray-800 text-gray-900 dark:text-white transform transition-transform duration-300
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="flex flex-col h-full">
           <div className="p-5 border-gray-700">
             <div className="flex items-center space-x-3">
-                <BubbleChart  className="mr-1 w-6 h-6" />
+              <BubbleChart className="mr-1 w-6 h-6" />
               <span className="text-xl font-bold">DevBot</span>
             </div>
           </div>
-
           <div className="flex-1 p-4 overflow-visible">
             <div className="space-y-4">
               <select
@@ -153,14 +142,12 @@ const Dashboard = () => {
                   <option key={idx} value={model}>{model}</option>
                 ))}
               </select>
-
               <button 
                 onClick={handleNewChat}
                 className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition text-white"
               >
                 New Chat
               </button>
-
               <div className="pt-6">
                 <h2 className="text-lg font-semibold mb-3">Conversation History</h2>
                 <div className="relative z-10 max-h-[50vh] overflow-y-auto custom-scrollbar pr-1">
@@ -213,7 +200,6 @@ const Dashboard = () => {
                               {conv.title || `Conversation ${index + 1}`}
                             </div>
                           )}
-
                           {hoveredChatId === conv.id && (
                             <div className="flex relative">
                               <button
@@ -240,7 +226,6 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
-
           <div className="p-4 border-t border-gray-700">
             <div className="space-y-2">
               <div className="flex items-center p-2 rounded-md ">
@@ -251,8 +236,7 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
-
-      {/* Floating Dropdown Menu */}
+      {/* Floating Dropdown Menu remains unchanged */}
       {menuOpenId && (
         <div
           id="chat-menu"
@@ -298,10 +282,9 @@ const Dashboard = () => {
           </button>
         </div>
       )}
-
-      {/* Main Chat Section */}
+      {/* Top bar (search added here only) */}
       <div className="flex-1 flex flex-col">
-        <div className="flex justify-between items-center p-4 bg-white dark:bg-gray-800 border-b dark:border-gray-700">
+        <div className="flex justify-between items-center p-4 bg-white dark:bg-gray-800 border-b dark:border-gray-700 relative">
           <div className="flex items-center">
             {!sidebarOpen && (
               <button
@@ -315,35 +298,47 @@ const Dashboard = () => {
               {chatHistory.find(chat => chat.id === selectedChatId)?.title || "New Chat"}
             </h1>
           </div>
-
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-              className="p-2 rounded-lg hover:bg-gray-200 text-gray-900 dark:text-white dark:hover:bg-gray-700"
-            >
-              {theme === "light" ? <DarkIcon /> : <LightIcon />}
-            </button>
-            <button
-              onClick={handleLogout}
-              className="flex items-center px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition"
-            >
-              <LogoutIcon className="mr-1" />
-              <span className="hidden sm:inline">Logout</span>
-            </button>
-          </div>
+<div className="flex items-center space-x-3 relative">
+  {showSearch && (
+    <input
+      type="text"
+      placeholder="Search..."
+      className="px-3 py-2 w-64 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 shadow mr-2 transition-all duration-200"
+    />
+  )}
+  <button
+    onClick={() => setShowSearch(!showSearch)}
+    className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
+  >
+    <SearchIcon className="text-gray-900 dark:text-white" />
+  </button>
+  <button
+    onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+    className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
+  >
+    {theme === "light" ? <DarkIcon className="text-black" /> : <LightIcon className="text-white" />}
+  </button>
+  <button
+    onClick={handleLogout}
+    className="flex items-center px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition"
+  >
+    <LogoutIcon className="mr-1" />
+    <span className="hidden sm:inline">Logout</span>
+  </button>
+</div>
         </div>
-
         <div className="flex-1 p-10 overflow-hidden">
           <Chat
-  selectedModel={selectedModel}
-  setChatHistory={setChatHistory}
-  selectedChatId={selectedChatId}
-  setSelectedChatId={setSelectedChatId}
-  disableInput={!selectedModel}
-/></div>
+            selectedModel={selectedModel}
+            setChatHistory={setChatHistory}
+            selectedChatId={selectedChatId}
+            setSelectedChatId={setSelectedChatId}
+            disableInput={!selectedModel}
+            searchQuery={searchQuery} // <-- this
+          />
+        </div>
       </div>
     </div>
   );
 };
-
 export default Dashboard;

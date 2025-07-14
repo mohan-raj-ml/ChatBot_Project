@@ -104,6 +104,11 @@ class OllamaLLM(LLM):
 
 class User(BaseModel):
     username: str
+    email: Optional[str] = None
+    password: str
+
+class LoginRequest(BaseModel):
+    identifier: str  # username or email
     password: str
 
 class PromptRequest(BaseModel): # This model isn't used directly in /api/respond, but good for clarity
@@ -121,31 +126,51 @@ class RenameChatRequest(BaseModel):
 @app.post("/signup")
 def signup(user: User):
     db = get_db()
+    email = user.email.strip()
+    username = user.username.strip()
+    password = user.password.strip()
+
+    # ✅ Restrict allowed domain
+    allowed_domain = "@xoriant.com"
+    if not email.endswith(allowed_domain):
+        raise HTTPException(status_code=400, detail=f"Email must be from the {allowed_domain} domain.")
+
     try:
-        db.execute("INSERT INTO users (username, password) VALUES (?, ?)",
-                   (user.username.strip(), user.password.strip()))
+        db.execute(
+            "INSERT INTO users (username, email, password) VALUES (?, ?, ?)",
+            (username, email, password)
+        )
         db.commit()
-        logger.info(f"User {user.username} signed up successfully.")
+        logger.info(f"User {username} signed up successfully.")
         return {"success": True, "message": "Signup successful."}
-    except sqlite3.IntegrityError:
-        logger.warning(f"Signup failed: Username {user.username} already exists.")
-        raise HTTPException(status_code=409, detail="Username already exists.")
-    except Exception as e:
-        logger.exception("Error during signup process.")
-        raise HTTPException(status_code=500, detail="Internal server error during signup.")
+    except sqlite3.IntegrityError as e:
+        if "username" in str(e):
+            raise HTTPException(status_code=409, detail="Username already exists.")
+        elif "email" in str(e):
+            raise HTTPException(status_code=409, detail="Email already exists.")
+        else:
+            raise HTTPException(status_code=500, detail="Internal error during signup.")
+
 
 
 @app.post("/login")
-async def login(user: User, request: Request):
+async def login(login_req: LoginRequest, request: Request):
     db = get_db()
-    result = db.execute("SELECT * FROM users WHERE username = ? AND password = ?",
-                         (user.username, user.password)).fetchone()
-    if result:
-        request.session['user'] = user.username
-        logger.info(f"User {user.username} logged in successfully.")
+    identifier = login_req.identifier.strip()
+    password = login_req.password.strip()
+
+    user = db.execute(
+        "SELECT * FROM users WHERE (username = ? OR email = ?) AND password = ?",
+        (identifier, identifier, password)
+    ).fetchone()
+
+    if user:
+        request.session['user'] = user["username"]
+        logger.info(f"User {user['username']} logged in successfully.")
         return {"success": True, "message": "Login successful."}
-    logger.warning(f"Login failed for user {user.username}: Invalid credentials.")
+    
     raise HTTPException(status_code=401, detail="Invalid credentials.")
+
 
 @app.post("/logout")
 async def logout(request: Request):

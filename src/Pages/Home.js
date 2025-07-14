@@ -6,7 +6,9 @@ import API_BASE_URL from '../Components/api';
 const Home = () => {
   const [isSignup, setIsSignup] = useState(false);
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -25,38 +27,50 @@ const Home = () => {
   }, []);
 
   const handleAuth = async () => {
-    const endpoint = isSignup ? "signup" : "login";
     setMessage("");
 
+    if (isSignup) {
+      if (!email.trim().endsWith("@xoriant.com")) {
+        setMessage("Email not valid. Please use your Xoriant email.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setMessage("Passwords do not match.");
+        return;
+      }
+    }
+
+    const endpoint = isSignup ? "signup" : "login";
+    const payload = isSignup
+      ? { username: username.trim(), email: email.trim(), password }
+      : { identifier: username.trim(), password };
+
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/${endpoint}`,
-        { username, password },
-        { withCredentials: true }
-      );
+      const response = await axios.post(`${API_BASE_URL}/${endpoint}`, payload, { withCredentials: true });
 
       if (response.data.success) {
         if (isSignup) {
           setIsSignup(false);
           setUsername("");
           setPassword("");
+          setConfirmPassword("");
+          setEmail("");
           setMessage("Signup successful! You can now log in.");
         } else {
-          localStorage.setItem("user", JSON.stringify({ username }));
+          localStorage.setItem("user", JSON.stringify({ username: username.trim() }));
           navigate("/dashboard/chat");
         }
       } else {
         setMessage(response.data.message || "Something went wrong.");
       }
     } catch (err) {
-      console.error(err);
       let msg = "Something went wrong.";
       if (err.response?.status === 409) {
-        msg = "Account already in use.";
+        msg = "Username or email already in use.";
       } else if (err.response?.status === 401) {
         msg = "Invalid credentials. Please try again.";
-      } else if (err.response?.data?.message) {
-        msg = err.response.data.message;
+      } else if (err.response?.status === 400) {
+        msg = err.response?.data?.detail || "Invalid request.";
       }
       setMessage(msg);
     }
@@ -76,32 +90,50 @@ const Home = () => {
         <h1 style={styles.heading}>
           {isSignup ? "Sign Up" : "Login"}
         </h1>
-
-        <input
-          type="text"
-          placeholder="Username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          style={styles.input}
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={styles.input}
-        />
-
-        <button onClick={handleAuth} style={styles.button}>
-          {isSignup ? "Create Account" : "Login"}
-        </button>
-
+        <form onSubmit={(e) => { e.preventDefault(); handleAuth(); }}>
+          <input
+            type="text"
+            placeholder={isSignup ? "Username" : "Username or Email"}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            style={styles.input}
+          />
+          {isSignup && (
+            <input
+              type="email"
+              placeholder="Email (@example.com)"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={styles.input}
+            />
+          )}
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={styles.input}
+            autoComplete={isSignup ? "new-password" : "current-password"}
+          />
+          {isSignup && (
+            <input
+              type="password"
+              placeholder="Confirm Password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              style={styles.input}
+              autoComplete="new-password"
+            />
+          )}
+          <button type="submit" style={styles.button}>
+            {isSignup ? "Create Account" : "Login"}
+          </button>
+        </form>
         {message && (
           <p style={{ ...styles.message, color: message.includes("successful") ? "#0a0" : "#222" }}>
             {message}
           </p>
         )}
-
         <p style={styles.toggle}>
           {isSignup ? (
             <>
