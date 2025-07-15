@@ -13,6 +13,7 @@ import io
 from pptx import Presentation
 import asyncio
 import logging
+import re
 
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
@@ -20,6 +21,10 @@ from langchain.llms.base import LLM
 from langchain.chains.summarize import load_summarize_chain
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.docstore.document import Document
+
+
+def remove_think_tags(text: str) -> str:
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 # Assuming vector_store.py is in the same directory and contains the updated functions
 from vector_store import get_faiss_index, save_faiss_index, embedding_model as global_embedding_model
@@ -42,7 +47,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000","*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -283,7 +288,7 @@ def rename_chat(req: RenameChatRequest, request: Request):
             logger.warning(f"Unauthorized rename attempt to chat_id {req.chat_id} by user {username}.")
             raise HTTPException(status_code=403, detail="Forbidden: Chat does not belong to user.")
 
-        db.execute("UPDATE chats SET title = ? WHERE id = ? WHERE user_id = ?", (req.new_title, req.chat_id, user_id))
+        db.execute("UPDATE chats SET title = ? WHERE id = ? AND user_id = ?", (req.new_title, req.chat_id, user_id))
         db.commit()
         logger.info(f"Chat {req.chat_id} renamed to '{req.new_title}' by user {username}.")
         return {"success": True}
@@ -435,6 +440,7 @@ async def respond(
 
         try:
             assistant_response = chain.invoke({"context": full_context})
+            assistant_response = remove_think_tags(assistant_response)
             if not assistant_response.strip():
                 assistant_response = "I'm sorry, I couldn't generate a response. Please try again."
                 logger.warning(f"LLM returned an empty response for chat {chat_id}.")
@@ -462,14 +468,17 @@ async def respond(
         msg_count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id = ?", (chat_id,)).fetchone()[0]
         if msg_count >= 10 and msg_count % 10 == 0: # Summarize every 10 messages (adjust as needed)
             logger.info(f"Initiating summarization for chat {chat_id} (message count: {msg_count}).")
-            full_chat_for_summary = "\n".join([f"{m['role'].capitalize()}: {m['content']}" for m in messages]) # Use full history for summary
+            full_chat_for_summary = "\n".join([
+                f"{m['role'].capitalize()}: {remove_think_tags(m['content'])}" for m in messages
+            ]) # Use full history for summary
             if full_chat_for_summary.strip():
                 text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0) # Adjust chunk_size/overlap if needed
                 docs = [doc for doc in text_splitter.create_documents([full_chat_for_summary]) if doc.page_content.strip()]
                 if docs:
                     try:
                         summarize_llm = get_llm(model) # Use the chosen model for summarization
-                        summary_chain = load_summarize_chain(summarize_llm, chain_type="stuff")
+                        summary_chain = load_summarize_chain(summarize_llm, chain_type="refine")
+    
                         new_summary = summary_chain.run(docs).strip()
                         if new_summary:
                             db.execute("INSERT OR REPLACE INTO chat_summaries (chat_id, summary) VALUES (?, ?)", (chat_id, new_summary))
