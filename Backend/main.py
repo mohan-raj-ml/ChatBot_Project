@@ -14,7 +14,8 @@ from pptx import Presentation
 import asyncio
 import logging
 import re
-
+import time
+from fastapi import BackgroundTasks
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 from langchain.llms.base import LLM
@@ -44,7 +45,7 @@ def calculate_response_token_budget(full_context: str, model: str) -> int:
     used_tokens = count_tokens(full_context, model)
     
     # Leave a tiny safety buffer (e.g. 20 tokens)
-    available_for_response = max(total_limit - used_tokens - 20, 128)
+    available_for_response = max(total_limit - used_tokens - 100, 128)
     
     return available_for_response
 
@@ -355,13 +356,16 @@ def rename_chat(req: RenameChatRequest, request: Request):
 
 
 @app.post("/api/respond")
+
 async def respond(
     request: Request,
+    background_tasks: BackgroundTasks,
     prompt: str = Form(...),
     model: str = Form(...),
     chat_id: int = Form(...),
     file: UploadFile = File(None)
 ):
+    start = time.time()
     username = request.session.get("user")
     if not username:
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -530,75 +534,86 @@ async def respond(
             db.execute("INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)", (chat_id, "assistant", assistant_response))
             db.commit()
             logger.info(f"Assistant response saved for chat {chat_id}.")
+        
+
+        # Trigger background summarization (every 10 messages)
+        msg_count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id = ?", (chat_id,)).fetchone()[0]
+        if msg_count >= 10 and msg_count % 10 == 0:
+            background_tasks.add_task(summarize_chat, DB_NAME, chat_id, model, messages)
+
+        # Trigger background title generation (after first user + assistant message)
+        if msg_count == 2 and messages[0].get("role") == "user":
+            background_tasks.add_task(generate_title, DB_NAME, chat_id, messages[0]["content"], model)
 
         # 10. Periodically Summarize Chat
-        msg_count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id = ?", (chat_id,)).fetchone()[0]
-        if msg_count >= 10 and msg_count % 10 == 0: # Summarize every 10 messages (adjust as needed)
-            logger.info(f"Initiating summarization for chat {chat_id} (message count: {msg_count}).")
-            full_chat_for_summary = "\n".join([
-                f"{m['role'].capitalize()}: {remove_think_tags(m['content'])}" for m in messages
-            ]) # Use full history for summary
-            if full_chat_for_summary.strip():
-                text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0) # Adjust chunk_size/overlap if needed
-                docs = [doc for doc in text_splitter.create_documents([full_chat_for_summary]) if doc.page_content.strip()]
-                if docs:
-                    try:
-                        summarize_llm = get_llm(model) # Use the chosen model for summarization
-                        summary_chain = load_summarize_chain(summarize_llm, chain_type="refine")
+        # msg_count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id = ?", (chat_id,)).fetchone()[0]
+        # if msg_count >= 10 and msg_count % 10 == 0: # Summarize every 10 messages (adjust as needed)
+        #     logger.info(f"Initiating summarization for chat {chat_id} (message count: {msg_count}).")
+        #     full_chat_for_summary = "\n".join([
+        #         f"{m['role'].capitalize()}: {remove_think_tags(m['content'])}" for m in messages
+        #     ]) # Use full history for summary
+        #     if full_chat_for_summary.strip():
+        #         text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0) # Adjust chunk_size/overlap if needed
+        #         docs = [doc for doc in text_splitter.create_documents([full_chat_for_summary]) if doc.page_content.strip()]
+        #         if docs:
+        #             try:
+        #                 summarize_llm = get_llm(model) # Use the chosen model for summarization
+        #                 summary_chain = load_summarize_chain(summarize_llm, chain_type="refine")
     
-                        new_summary = summary_chain.run(docs).strip()
-                        if new_summary:
-                            db.execute("INSERT OR REPLACE INTO chat_summaries (chat_id, summary) VALUES (?, ?)", (chat_id, new_summary))
-                            db.commit()
-                            logger.info(f"✅ Summary updated for chat {chat_id}")
-                        else:
-                            logger.warning(f"Summarization returned an empty string for chat {chat_id}.")
-                    except Exception as e:
-                        logger.error(f"❌ Summarization error for chat {chat_id}: {e}")
-                else:
-                    logger.warning(f"⚠️ Skipping summarization: no valid documents generated from chat history for chat {chat_id}.")
-            else:
-                logger.warning(f"⚠️ Skipping summarization: full chat history is empty for chat {chat_id}.")
+        #                 new_summary = summary_chain.run(docs).strip()
+        #                 if new_summary:
+        #                     db.execute("INSERT OR REPLACE INTO chat_summaries (chat_id, summary) VALUES (?, ?)", (chat_id, new_summary))
+        #                     db.commit()
+        #                     logger.info(f"✅ Summary updated for chat {chat_id}")
+        #                 else:
+        #                     logger.warning(f"Summarization returned an empty string for chat {chat_id}.")
+        #             except Exception as e:
+        #                 logger.error(f"❌ Summarization error for chat {chat_id}: {e}")
+        #         else:
+        #             logger.warning(f"⚠️ Skipping summarization: no valid documents generated from chat history for chat {chat_id}.")
+        #     else:
+        #         logger.warning(f"⚠️ Skipping summarization: full chat history is empty for chat {chat_id}.")
 
         # 11. Title Generation for New Chats (after the first user message + assistant response)
         # Check if this is the first assistant response in a new chat
         # The 'messages' list already includes the user's latest prompt.
         # If the total message count is 2 (user + assistant), then it's the first turn.
-        if msg_count == 2 and messages[0].get("role") == "user":
-            logger.info(f"Attempting title generation for new chat {chat_id}.")
-            try:
-                title_template = PromptTemplate.from_template("""
-                Generate a short, 2–5 word chat title for this user message.
+        # if msg_count == 2 and messages[0].get("role") == "user":
+        #     logger.info(f"Attempting title generation for new chat {chat_id}.")
+        #     try:
+        #         title_template = PromptTemplate.from_template("""
+        #         Generate a short, 2–5 word chat title for this user message.
 
-                User: {first_user_message}
-                Only respond with the title. No quotes or punctuation.
-                """)
+        #         User: {first_user_message}
+        #         Only respond with the title. No quotes or punctuation.
+        #         """)
 
-                title_chain = title_template | OllamaLLM(model=model)
+        #         title_chain = title_template | OllamaLLM(model=model)
 
-                first_user_message_content = messages[0].get("content", "")
-                if first_user_message_content:
-                    raw_title = remove_think_tags(title_chain.invoke({"first_user_message": first_user_message_content})).strip()
-                    if raw_title:
-                        # Clean the title: take first line, remove quotes, limit length
-                        title = raw_title.split("\n")[0].replace('"', '').replace("Title:", "").strip()[:60]
-                        if not title: # If cleaning resulted in empty string
-                            title = "New Chat" # Fallback title
-                        db.execute("UPDATE chats SET title = ? WHERE id = ?", (title, chat_id))
-                        db.commit()
-                        logger.info(f"Chat {chat_id} titled: '{title}'.")
-                    else:
-                        logger.warning(f"Title generation returned empty string for chat {chat_id}.")
-                else:
-                    logger.warning(f"First user message content was empty for title generation in chat {chat_id}.")
-            except Exception as e:
-                logger.error(f"⚠️ Title generation failed for chat {chat_id}: {e}")
-                # You might want to update the title to a generic one if generation fails
-                db.execute("UPDATE chats SET title = ? WHERE id = ?", ("Unnamed Chat", chat_id))
-                db.commit()
+        #         first_user_message_content = messages[0].get("content", "")
+        #         if first_user_message_content:
+        #             raw_title = remove_think_tags(title_chain.invoke({"first_user_message": first_user_message_content})).strip()
+        #             if raw_title:
+        #                 # Clean the title: take first line, remove quotes, limit length
+        #                 title = raw_title.split("\n")[0].replace('"', '').replace("Title:", "").strip()[:60]
+        #                 if not title: # If cleaning resulted in empty string
+        #                     title = "New Chat" # Fallback title
+        #                 db.execute("UPDATE chats SET title = ? WHERE id = ?", (title, chat_id))
+        #                 db.commit()
+        #                 logger.info(f"Chat {chat_id} titled: '{title}'.")
+        #             else:
+        #                 logger.warning(f"Title generation returned empty string for chat {chat_id}.")
+        #         else:
+        #             logger.warning(f"First user message content was empty for title generation in chat {chat_id}.")
+        #     except Exception as e:
+        #         logger.error(f"⚠️ Title generation failed for chat {chat_id}: {e}")
+        #         # You might want to update the title to a generic one if generation fails
+        #         db.execute("UPDATE chats SET title = ? WHERE id = ?", ("Unnamed Chat", chat_id))
+        #         db.commit()
 
-
+        logger.info(f"Response generated in {time.time() - start:.2f} seconds.")
         return JSONResponse(content={"response": assistant_response})
+    
 
     except HTTPException: # Re-raise HTTPExceptions (like from OllamaLLM or auth checks)
         raise
@@ -606,6 +621,7 @@ async def respond(
         logger.exception(f"Unhandled error in /api/respond endpoint for user {username}, chat {chat_id}.")
         db.rollback() # Rollback any pending database changes
         return JSONResponse(status_code=500, content={"response": f"❗ Internal error occurred: {e}"})
+    
 
 
 @app.post("/api/delete_chat")
@@ -648,3 +664,54 @@ async def preflight(rest_of_path: str):
 @app.on_event("startup")
 def startup():
     init_db()
+
+
+def summarize_chat(db_path, chat_id, model, messages):
+    logger.info(f"🎯 Running background summarization for chat {chat_id}")
+    try:
+        db = sqlite3.connect(db_path)
+        db.row_factory = sqlite3.Row
+        full_chat = "\n".join([
+            f"{m['role'].capitalize()}: {remove_think_tags(m['content'])}"
+            for m in messages
+        ])
+        if full_chat.strip():
+            text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+            docs = text_splitter.create_documents([full_chat])
+            if docs:
+                llm = OllamaLLM(model=model)
+                summary_chain = load_summarize_chain(llm, chain_type="refine")
+                summary = summary_chain.run(docs).strip()
+                if summary:
+                    db.execute(
+                        "INSERT OR REPLACE INTO chat_summaries (chat_id, summary) VALUES (?, ?)",
+                        (chat_id, summary)
+                    )
+                    db.commit()
+    except Exception as e:
+        logger.error(f"⚠️ Background summary generation failed: {e}")
+    finally:
+        db.close()
+
+
+def generate_title(db_path, chat_id, first_user_message, model):
+    logger.info(f"📌 Generating title for chat {chat_id}")
+    try:
+        db = sqlite3.connect(db_path)
+        db.row_factory = sqlite3.Row
+        title_template = PromptTemplate.from_template("""
+        Generate a short, 2–5 word chat title for this user message.
+
+        User: {first_user_message}
+        Only respond with the title. No quotes or punctuation.
+        """)
+        chain = title_template | OllamaLLM(model=model)
+        raw_title = remove_think_tags(chain.invoke({"first_user_message": first_user_message})).strip()
+        title = raw_title.split("\n")[0].replace('"', '').replace("Title:", "").strip()[:60]
+        if title:
+            db.execute("UPDATE chats SET title = ? WHERE id = ?", (title, chat_id))
+            db.commit()
+    except Exception as e:
+        logger.error(f"⚠️ Background title generation failed: {e}")
+    finally:
+        db.close()
