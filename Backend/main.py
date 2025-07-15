@@ -511,7 +511,7 @@ async def respond(
 
                 first_user_message_content = messages[0].get("content", "")
                 if first_user_message_content:
-                    raw_title = title_chain.invoke({"first_user_message": first_user_message_content}).strip()
+                    raw_title = remove_think_tags(title_chain.invoke({"first_user_message": first_user_message_content})).strip()
                     if raw_title:
                         # Clean the title: take first line, remove quotes, limit length
                         title = raw_title.split("\n")[0].replace('"', '').replace("Title:", "").strip()[:60]
