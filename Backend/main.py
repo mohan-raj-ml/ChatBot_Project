@@ -23,6 +23,62 @@ from langchain.text_splitter import CharacterTextSplitter
 from langchain.docstore.document import Document
 
 
+import tiktoken
+
+MODEL_TOKEN_LIMITS = {
+    "gemma:2b": 2048,
+    "gemma:7b": 8192,
+    "mistral": 8192,
+    "mistral:7b": 8192,
+    "llama3": 8192,
+    "llama3:8b": 8192,
+    "llama2": 4096,
+    "phi": 2048,
+    "tinyllama": 2048,
+    "default": 4096
+}
+
+def calculate_response_token_budget(full_context: str, model: str) -> int:
+    model = model.lower()
+    total_limit = next((v for k, v in MODEL_TOKEN_LIMITS.items() if k in model), MODEL_TOKEN_LIMITS["default"])
+    used_tokens = count_tokens(full_context, model)
+    
+    # Leave a tiny safety buffer (e.g. 20 tokens)
+    available_for_response = max(total_limit - used_tokens - 20, 128)
+    
+    return available_for_response
+
+
+
+def count_tokens(text: str, model: str = "gpt-3.5-turbo") -> int:
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+    except Exception:
+        encoding = tiktoken.get_encoding("cl100k_base")
+    return len(encoding.encode(text))
+
+def trim_context(summary, retrieved, recent, file_section, prompt, max_tokens=3800):
+    parts = {
+        "prompt": prompt,
+        "retrieved": retrieved,
+        "summary": summary,   
+        "recent": recent,
+        "file_section": file_section
+        
+    }
+    used_tokens = 0
+    trimmed = {}
+
+    for key, value in parts.items():
+        tokens = count_tokens(value)
+        if used_tokens + tokens <= max_tokens:
+            trimmed[key] = value
+            used_tokens += tokens
+        else:
+            trimmed[key] = f"...[Omitted {key} due to token limit]..."
+
+    return trimmed
+
 def remove_think_tags(text: str) -> str:
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
@@ -420,13 +476,24 @@ async def respond(
         User: {prompt}
         Assistant:""")
 
+         # Temporarily use a high limit to build full context
+        temp_limit = MODEL_TOKEN_LIMITS.get(model.lower(), 4096)
+        temp_trimmed = trim_context(summary, retrieved, recent_str, file_section, prompt, max_tokens=temp_limit)
+
         full_context = context_template.format_prompt(
-            summary=summary,
-            retrieved=retrieved,
-            recent=recent_str,
-            file_section=file_section,
-            prompt=prompt
+            summary=temp_trimmed["summary"],
+            retrieved=temp_trimmed["retrieved"],
+            recent=temp_trimmed["recent"],
+            file_section=temp_trimmed["file_section"],
+            prompt=temp_trimmed["prompt"]
         ).to_string()
+
+        # 🧠 Dynamically calculate response token space AFTER seeing actual context usage
+        response_token_budget = calculate_response_token_budget(full_context, model)
+
+        logger.info(f"Model: {model} | Total limit: {temp_limit} | Context tokens used: {count_tokens(full_context, model)} | Response token budget: {response_token_budget}")
+
+
 
 
         logger.info("------ PROMPT CONTEXT BEGIN ------")
