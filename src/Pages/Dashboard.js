@@ -300,12 +300,15 @@ const Dashboard = () => {
           </div>
 <div className="flex items-center space-x-3 relative">
   {showSearch && (
-    <input
-      type="text"
-      placeholder="Search..."
-      className="px-3 py-2 w-64 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 shadow mr-2 transition-all duration-200"
-    />
-  )}
+  <input
+    type="text"
+    placeholder="Search..."
+    value={searchQuery}
+    onChange={(e) => setSearchQuery(e.target.value)}
+    className="px-3 py-2 w-64 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 shadow mr-2 transition-all duration-200"
+  />
+)}
+
   <button
     onClick={() => setShowSearch(!showSearch)}
     className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"

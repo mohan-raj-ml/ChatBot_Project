@@ -5,12 +5,38 @@ import gptImgLogo from "../assets/chatgptLogo.svg";
 import { Mic, Paperclip, Send, Copy, Check, Square, X } from "lucide-react";
 import { BubbleChart } from "@mui/icons-material";
 import { Pencil } from "lucide-react";
+import { visit } from "unist-util-visit";
+import rehypeRaw from "rehype-raw";
+
+
+const remarkHighlight = (query) => () => (tree) => {
+  if (!query?.trim()) return;
+
+  const regex = new RegExp(`(${query})`, "gi");
+
+  visit(tree, "text", (node, index, parent) => {
+    const parts = node.value.split(regex);
+    if (parts.length === 1) return;
+
+    const newNodes = parts.map((part) =>
+      regex.test(part)
+        ? {
+            type: "html",
+            value: `<mark class="bg-yellow-300 text-black">${part}</mark>`,
+          }
+        : { type: "text", value: part }
+    );
+
+    parent.children.splice(index, 1, ...newNodes);
+  });
+};
 const Chat = ({
   selectedModel,
   setChatHistory,
   selectedChatId,
   setSelectedChatId,
   disableInput,
+  searchQuery,
 }) => {
   const [typedValue, setTypedValue] = useState("");
   const [messageData, setMessageData] = useState([]);
@@ -26,6 +52,10 @@ const Chat = ({
   const user = JSON.parse(localStorage.getItem("user"));
   const username = user?.username || "Guest";
   const userAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${username}`;
+  const highlightedIndexRef = useRef(-1);
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messageData, loading]);
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messageData, loading]);
@@ -178,6 +208,34 @@ const Chat = ({
     };
     recognition.start();
   };
+  const highlightSearch = (text) => {
+    if (!searchQuery?.trim()) return text;
+    const regex = new RegExp(`(${searchQuery})`, "gi");
+    return text.split(regex).map((part, i) =>
+      regex.test(part) ? (
+        <mark key={i} className="bg-yellow-300 text-black">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    );
+  };
+  const highlightText = (text, query) => {
+  if (!query?.trim()) return text;
+  const regex = new RegExp(`(${query})`, "gi");
+  const parts = text.split(regex);
+  return parts.map((part, i) =>
+    regex.test(part) ? (
+      <mark key={i} className="bg-yellow-300 text-black">
+        {part}
+      </mark>
+    ) : (
+      part
+    )
+  );
+};
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-6">
@@ -213,7 +271,14 @@ const Chat = ({
                         : "bg-gray-100 dark:bg-gray-800"
                     } p-3 rounded-lg text-base relative`}
                   >
-                    <ReactMarkdown>{msg.message}</ReactMarkdown>
+                   <ReactMarkdown
+                    remarkPlugins={[remarkHighlight(searchQuery)]}
+                    rehypePlugins={[rehypeRaw]}
+                    skipHtml={false}
+                  >
+                    {msg.message}
+                  </ReactMarkdown>
+
                     {msg.file && (
                       <div className="mt-2">
                         {msg.fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
