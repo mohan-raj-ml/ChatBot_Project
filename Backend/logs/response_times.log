@@ -29,3 +29,16 @@
 2025-07-16 05:13:20,105 - User: Mohanraj | Chat ID: 26 | Model: gemma3:1b | Duration: 0.51 seconds
 2025-07-16 05:13:32,532 - User: Mohanraj | Chat ID: 26 | Model: gemma3:1b | Duration: 0.43 seconds
 2025-07-16 05:13:46,946 - User: Mohanraj | Chat ID: 26 | Model: gemma3:1b | Duration: 0.56 seconds
+2025-07-16 07:18:14,580 - User: Mohanraj | Chat ID: 27 | Model: gemma3:1b | Duration: 11.13 seconds
+2025-07-16 07:18:31,280 - User: Mohanraj | Chat ID: 27 | Model: gemma3:1b | Duration: 2.04 seconds
+2025-07-16 07:18:39,599 - User: Mohanraj | Chat ID: 27 | Model: gemma3:1b | Duration: 1.71 seconds
+2025-07-16 07:22:13,668 - User: Mohanraj | Chat ID: 28 | Model: gemma3:1b | Duration: 8.77 seconds
+2025-07-16 07:32:15,822 - User: Mohanraj | Chat ID: 29 | Model: gemma3:1b | Duration: 0.55 seconds
+2025-07-16 08:48:44,417 - User: Mohanraj | Chat ID: 30 | Model: gemma3:1b | Duration: 25.65 seconds
+2025-07-16 08:49:29,085 - User: Mohanraj | Chat ID: 30 | Model: gemma3:1b | Duration: 1.83 seconds
+2025-07-16 08:50:12,554 - User: Mohanraj | Chat ID: 31 | Model: gemma3:1b | Duration: 1.44 seconds
+2025-07-16 08:54:04,948 - User: Mohanraj | Chat ID: 31 | Model: gemma3:1b | Duration: 2.47 seconds
+2025-07-16 08:54:22,837 - User: Mohanraj | Chat ID: 31 | Model: gemma3:1b | Duration: 2.92 seconds
+2025-07-16 08:56:01,226 - User: Mohanraj | Chat ID: 32 | Model: gemma3:1b | Duration: 0.93 seconds
+2025-07-16 08:56:17,326 - User: Mohanraj | Chat ID: 32 | Model: gemma3:1b | Duration: 1.78 seconds
+2025-07-16 08:59:11,957 - User: Mohanraj | Chat ID: 32 | Model: deepseek-r1:1.5b | Duration: 39.73 seconds
