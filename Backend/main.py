@@ -26,6 +26,20 @@ from langchain.docstore.document import Document
 
 import tiktoken
 
+response_time_logger = logging.getLogger("response_time")
+response_time_logger.setLevel(logging.INFO)
+
+# Create file handler for the logger
+rt_file_handler = logging.FileHandler("logs/response_times.log")
+rt_file_handler.setLevel(logging.INFO)
+
+# Optional: formatter for clean timestamps
+formatter = logging.Formatter('%(asctime)s - %(message)s')
+rt_file_handler.setFormatter(formatter)
+
+# Add the handler to the logger
+response_time_logger.addHandler(rt_file_handler)
+
 MODEL_TOKEN_LIMITS = {
     "gemma:2b": 2048,
     "gemma:7b": 8192,
@@ -495,7 +509,9 @@ async def respond(
         # 🧠 Dynamically calculate response token space AFTER seeing actual context usage
         response_token_budget = calculate_response_token_budget(full_context, model)
 
-        logger.info(f"Model: {model} | Total limit: {temp_limit} | Context tokens used: {count_tokens(full_context, model)} | Response token budget: {response_token_budget}")
+        duration = time.time() - start
+        logger.info(f"Response generated in {duration:.2f} seconds.")
+        response_time_logger.info(f"User: {username} | Chat ID: {chat_id} | Model: {model} | Duration: {duration:.2f} seconds")
 
 
 
