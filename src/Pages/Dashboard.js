@@ -49,6 +49,34 @@ const Dashboard = () => {
       .then((res) => setChatHistory(res.data.chats || []))
       .catch((err) => console.error("Error loading chat history:", err));
   }, []);
+  useEffect(() => {
+  if (!selectedChatId) return;
+
+  const interval = setInterval(() => {
+    axios
+      .get("http://localhost:8000/api/chat_title", {
+        params: { chat_id: selectedChatId },
+        withCredentials: true,
+      })
+      .then((res) => {
+        const newTitle = res.data.title;
+        setChatHistory((prevChats) =>
+          prevChats.map((chat) =>
+            chat.id === selectedChatId && newTitle !== "New Chat"
+              ? { ...chat, title: newTitle }
+              : chat
+          )
+        );
+        if (newTitle !== "New Chat") clearInterval(interval);
+      })
+      .catch((err) => {
+        console.error("Error polling chat title:", err);
+      });
+  }, 3000); // Every 3 seconds
+
+  return () => clearInterval(interval);
+}, [selectedChatId]);
+
   const handleNewChat = async () => {
     try {
       const res = await axios.post(

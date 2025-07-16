@@ -126,6 +126,22 @@ def delete_chat(chat_id: int, request: Request):
         shutil.rmtree(faiss_dir)
     return {"success": True}
 
+
+@router.get("/api/chat_title")
+def get_chat_title(chat_id: int, request: Request):
+    username = request.session.get("user")
+    if not username:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    db = get_db()
+    user_id = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()["id"]
+    chat = db.execute("SELECT title, user_id FROM chats WHERE id = ?", (chat_id,)).fetchone()
+    if not chat or chat["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    return {"title": chat["title"]}
+
+
 @router.post("/api/respond")
 
 async def respond(
@@ -318,6 +334,7 @@ async def respond(
         # Trigger background title generation (after first user + assistant message)
         if msg_count == 2 and messages[0].get("role") == "user":
             background_tasks.add_task(generate_title, DB_NAME, chat_id, messages[0]["content"], model)
+            await asyncio.sleep(0.1)
 
         # 10. Periodically Summarize Chat
         # msg_count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id = ?", (chat_id,)).fetchone()[0]
@@ -386,7 +403,12 @@ async def respond(
         #         db.commit()
 
         logger.info(f"Response generated in {time.time() - start:.2f} seconds.")
-        return JSONResponse(content={"response": assistant_response})
+
+        # Query updated title from DB
+        title_row = db.execute("SELECT title FROM chats WHERE id = ?", (chat_id,)).fetchone()
+        updated_title = title_row["title"] if title_row else "New Chat"
+
+        return JSONResponse(content={"response": assistant_response, "title": updated_title})
     
 
     except HTTPException: # Re-raise HTTPExceptions (like from OllamaLLM or auth checks)
