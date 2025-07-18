@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-import sqlite3
 import logging
+from utils import database  # <- import async PostgreSQL db
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -16,15 +16,8 @@ class LoginRequest(BaseModel):
     identifier: str
     password: str
 
-def get_db():
-    conn = sqlite3.connect("users.db", check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
-
 @router.post("/signup")
-def signup(user: User):
-    db = get_db()
+async def signup(user: User):
     email = user.email.strip()
     username = user.username.strip()
     password = user.password.strip()
@@ -34,23 +27,39 @@ def signup(user: User):
         raise HTTPException(status_code=400, detail=f"Email must be from the {allowed_domain} domain.")
 
     try:
-        db.execute("INSERT INTO users (username, email, password) VALUES (?, ?, ?)", (username, email, password))
-        db.commit()
+        query = """
+        INSERT INTO users (username, email, password)
+        VALUES (:username, :email, :password)
+        """
+        await database.execute(query, {
+            "username": username,
+            "email": email,
+            "password": password
+        })
         return {"success": True, "message": "Signup successful."}
-    except sqlite3.IntegrityError as e:
-        if "username" in str(e):
+    except Exception as e:
+        logger.error(f"Signup error: {e}")
+        error_msg = str(e).lower()
+        if "username" in error_msg:
             raise HTTPException(status_code=409, detail="Username already exists.")
-        elif "email" in str(e):
+        elif "email" in error_msg:
             raise HTTPException(status_code=409, detail="Email already exists.")
         raise HTTPException(status_code=500, detail="Internal error during signup.")
 
 @router.post("/login")
 async def login(login_req: LoginRequest, request: Request):
-    db = get_db()
     identifier = login_req.identifier.strip()
     password = login_req.password.strip()
 
-    user = db.execute("SELECT * FROM users WHERE (username = ? OR email = ?) AND password = ?", (identifier, identifier, password)).fetchone()
+    query = """
+    SELECT * FROM users
+    WHERE (username = :identifier OR email = :identifier)
+    AND password = :password
+    """
+    user = await database.fetch_one(query, {
+        "identifier": identifier,
+        "password": password
+    })
 
     if user:
         request.session["user"] = user["username"]
@@ -64,7 +73,7 @@ async def logout(request: Request):
     return {"success": True, "message": "Logged out successfully."}
 
 @router.get("/")
-def index(request: Request):
+async def index(request: Request):
     user = request.session.get("user")
     if not user:
         return {"authenticated": False, "message": "User not logged in"}

@@ -1,10 +1,7 @@
-# utils.py
-
 import os
 import re
 import time
 import logging
-import sqlite3
 import tiktoken
 import requests
 import io
@@ -15,6 +12,7 @@ from langchain.llms.base import LLM
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.docstore.document import Document
 from langchain.chains.summarize import load_summarize_chain
+from databases import Database
 
 # ---- LOGGER ----
 logger = logging.getLogger(__name__)
@@ -26,29 +24,36 @@ fh = logging.FileHandler("logs/response_times.log")
 fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
 response_time_logger.addHandler(fh)
 
-# ---- DB ----
-DB_NAME = 'users.db'
-def get_db():
-    conn = sqlite3.connect(DB_NAME, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+# ---- Async PostgreSQL DB ----
+DATABASE_URL = "postgresql+asyncpg://postgres:1234@localhost/chatbot_db"
 
-def init_db():
-    with sqlite3.connect(DB_NAME) as db:
-        db.execute("PRAGMA foreign_keys = ON")
-        if os.path.exists('schema.sql'):
-            with open('schema.sql', 'r') as f:
-                db.executescript(f.read())
-            logger.info("Database schema initialized successfully.")
-        else:
-            logger.warning("schema.sql not found. Database schema might not be initialized.")
+database = Database(DATABASE_URL)
+
+async def get_db():
+    return database
 
 # ---- LLM ----
+from langchain_core.callbacks import CallbackManagerForLLMRun
+
+from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain.llms.base import LLM
+from typing import Optional, List
+from fastapi import HTTPException
+import requests
+import aiohttp
+import logging
+
+logger = logging.getLogger(__name__)
+
 class OllamaLLM(LLM):
     model: str = "mistral"
 
-    def _call(self, prompt: str, stop=None):
+    def _call(
+        self,
+        prompt: str,
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None
+    ) -> str:
         try:
             res = requests.post("http://localhost:11434/api/generate", json={
                 "model": self.model,
@@ -64,6 +69,29 @@ class OllamaLLM(LLM):
             logger.error(f"Unexpected error in OllamaLLM call: {e}")
             raise HTTPException(status_code=500, detail=f"LLM generation failed: {e}")
 
+    async def _acall(
+        self,
+        prompt: str,
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None
+    ) -> str:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post("http://localhost:11434/api/generate", json={
+                    "model": self.model,
+                    "prompt": prompt,
+                    "stream": False
+                }) as resp:
+                    if resp.status == 200:
+                        json_resp = await resp.json()
+                        return json_resp.get("response", "").strip()
+                    else:
+                        text = await resp.text()
+                        raise HTTPException(status_code=500, detail=f"Ollama async error: {text}")
+        except Exception as e:
+            logger.error(f"Async error in OllamaLLM ({self.model}): {e}")
+            raise HTTPException(status_code=500, detail=f"Ollama async generation failed: {e}")
+
     @property
     def _identifying_params(self):
         return {"model": self.model}
@@ -71,6 +99,7 @@ class OllamaLLM(LLM):
     @property
     def _llm_type(self):
         return "ollama_custom"
+
 
 llm_cache = {}
 def get_llm(model: str):
@@ -129,10 +158,8 @@ def remove_think_tags(text: str) -> str:
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 # ---- Summarization ----
-def summarize_chat(db_path, chat_id, model, messages):
+async def summarize_chat(db: Database, chat_id: int, model: str, messages: list):
     try:
-        db = sqlite3.connect(db_path)
-        db.row_factory = sqlite3.Row
         full_chat = "\n".join([
             f"{m['role'].capitalize()}: {remove_think_tags(m['content'])}" for m in messages
         ])
@@ -144,17 +171,16 @@ def summarize_chat(db_path, chat_id, model, messages):
                 summary_chain = load_summarize_chain(llm, chain_type="refine")
                 summary = summary_chain.run(docs).strip()
                 if summary:
-                    db.execute("INSERT OR REPLACE INTO chat_summaries (chat_id, summary) VALUES (?, ?)", (chat_id, summary))
-                    db.commit()
+                    await db.execute(
+                        "INSERT INTO chat_summaries (chat_id, summary) VALUES (:chat_id, :summary) ON CONFLICT (chat_id) DO UPDATE SET summary = EXCLUDED.summary",
+                        {"chat_id": chat_id, "summary": summary}
+                    )
     except Exception as e:
         logger.error(f"⚠️ Background summary generation failed: {e}")
-    finally:
-        db.close()
 
-def generate_title(db_path, chat_id, first_user_message, model):
+# ---- Title Generation ----
+async def generate_title(db: Database, chat_id: int, first_user_message: str, model: str):
     try:
-        db = sqlite3.connect(db_path)
-        db.row_factory = sqlite3.Row
         title_template = PromptTemplate.from_template("""
         Generate a short, 2–5 word chat title for this user message.
 
@@ -165,12 +191,12 @@ def generate_title(db_path, chat_id, first_user_message, model):
         raw_title = remove_think_tags(chain.invoke({"first_user_message": first_user_message})).strip()
         title = raw_title.split("\n")[0].replace('"', '').replace("Title:", "").strip()[:60]
         if title:
-            db.execute("UPDATE chats SET title = ? WHERE id = ?", (title, chat_id))
-            db.commit()
+            await db.execute(
+                "UPDATE chats SET title = :title WHERE id = :chat_id",
+                {"title": title, "chat_id": chat_id}
+            )
     except Exception as e:
         logger.error(f"⚠️ Background title generation failed: {e}")
-    finally:
-        db.close()
 
 # ---- PPTX Extraction ----
 def extract_text_from_pptx(file_bytes: bytes, filename: str) -> str:
@@ -194,10 +220,8 @@ def get_relevant_context(prompt: str, chat_id: int) -> str:
     try:
         if global_embedding_model is None:
             raise RuntimeError("Embedding model is not initialized. Cannot use FAISS.")
-
         if chat_id not in faiss_cache:
             faiss_cache[chat_id] = get_faiss_index(chat_id)
-
         faiss_index = faiss_cache[chat_id]
         faiss_index.add_documents([Document(page_content=prompt)])
         save_faiss_index(faiss_index, chat_id)

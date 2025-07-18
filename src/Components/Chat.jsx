@@ -78,6 +78,35 @@ const Chat = ({
     };
     loadChatHistory();
   }, [selectedChatId]);
+  const pollForResponse = async (taskId, chatId) => {
+  const pollInterval = 1000; // 1s
+  const maxAttempts = 60; // 1 minute max
+  let attempts = 0;
+
+  return new Promise((resolve, reject) => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await axios.get(`http://localhost:8000/api/task_status?task_id=${taskId}`);
+        if (res.data.status === "done") {
+          clearInterval(interval);
+          resolve(res.data.response);
+        } else if (res.data.status === "error") {
+          clearInterval(interval);
+          reject(new Error(res.data.message || "Task failed"));
+        }
+      } catch (err) {
+        clearInterval(interval);
+        reject(err);
+      }
+
+      if (++attempts >= maxAttempts) {
+        clearInterval(interval);
+        reject(new Error("Timeout waiting for response"));
+      }
+    }, pollInterval);
+  });
+};
+
   const handleSubmit = async () => {
     if (!typedValue.trim() && !attachedFile) return;
     if (!selectedModel) {
@@ -136,13 +165,25 @@ const Chat = ({
         signal: abortController.signal,
         headers: { "Content-Type": "multipart/form-data" },
       });
-      if (!abortController.signal.aborted && res.data?.response?.trim()) {
-        const assistantMessage = {
-          type: "Receiver",
-          message: res.data.response,
-        };
-        setMessageData((prev) => [...prev, assistantMessage]);
+      let finalResponse = res.data?.response;
+
+      if (res.data.task_id) {
+        try {
+          finalResponse = await pollForResponse(res.data.task_id, currentChatId);
+        } catch (pollError) {
+          console.error("Polling failed:", pollError);
+          finalResponse = "⚠️ Failed to fetch response from background task.";
+        }
       }
+
+if (!abortController.signal.aborted && finalResponse?.trim()) {
+  const assistantMessage = {
+    type: "Receiver",
+    message: finalResponse,
+  };
+  setMessageData((prev) => [...prev, assistantMessage]);
+}
+
       const refreshed = await axios.get("http://localhost:8000/api/list_chats", {
         withCredentials: true,
       });
@@ -238,7 +279,7 @@ const Chat = ({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-6">
+      <div className="flex-1 overflow-y-auto chat-scrollbar p-4 space-y-6">
         {!selectedModel && messageData.length === 0 ? (
           <div className="h-full flex items-center justify-center text-gray-500">
             <p className="text-lg">Please select a model to begin chatting.</p>

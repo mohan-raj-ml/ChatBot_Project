@@ -52,30 +52,44 @@ const Dashboard = () => {
   useEffect(() => {
   if (!selectedChatId) return;
 
-  const interval = setInterval(() => {
-    axios
-      .get("http://localhost:8000/api/chat_title", {
+  const selectedChat = chatHistory.find(chat => chat.id === selectedChatId);
+  if (!selectedChat || selectedChat.title !== "New Chat") return;
+
+  let intervalId;
+  let hasUpdated = false;
+
+  const fetchTitle = async () => {
+    try {
+      const res = await axios.get("http://localhost:8000/api/chat_title", {
         params: { chat_id: selectedChatId },
         withCredentials: true,
-      })
-      .then((res) => {
-        const newTitle = res.data.title;
+      });
+
+      const newTitle = res.data.title;
+
+      if (newTitle !== "New Chat") {
         setChatHistory((prevChats) =>
           prevChats.map((chat) =>
-            chat.id === selectedChatId && newTitle !== "New Chat"
-              ? { ...chat, title: newTitle }
-              : chat
+            chat.id === selectedChatId ? { ...chat, title: newTitle } : chat
           )
         );
-        if (newTitle !== "New Chat") clearInterval(interval);
-      })
-      .catch((err) => {
-        console.error("Error polling chat title:", err);
-      });
-  }, 3000); // Every 3 seconds
+        hasUpdated = true;
+        clearInterval(intervalId);
+      }
+    } catch (err) {
+      console.error("Error polling chat title:", err);
+    }
+  };
 
-  return () => clearInterval(interval);
-}, [selectedChatId]);
+  intervalId = setInterval(() => {
+    if (!hasUpdated) {
+      fetchTitle();
+    }
+  }, 3000);
+
+  return () => clearInterval(intervalId);
+}, [selectedChatId, chatHistory]);
+
 
   const handleNewChat = async () => {
     try {
