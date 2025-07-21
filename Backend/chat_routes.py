@@ -152,7 +152,7 @@ async def respond(
     retrieved = get_relevant_context(prompt, chat_id)
     recent = "\n".join([
         f"{m['role'].capitalize()}: {m['content']}"
-        for m in messages[-10:] if m['role'] == "assistant" or m['content'] != prompt
+        for m in messages[-6:] if m['role'] == "assistant" or m['content'] != prompt
     ])
     file_section = f"File content:\n{file_text.strip()}" if file_text.strip() else ""
 
@@ -198,7 +198,7 @@ async def respond(
     if msg_count == 2:
         first_msg = messages[0]["content"]
         generate_title_task.delay(chat_id, first_msg, model)
-    if msg_count >= 10 and msg_count % 10 == 0:
+    if msg_count >= 6 and msg_count % 6 == 0:
         summarize_chat_task.delay(chat_id, model, messages)
 
     elapsed_time = time.time() - start_time
@@ -263,3 +263,5 @@ async def task_status(task_id: str):
     elif result.state == "FAILURE":
         return {"status": "error", "message": str(result.result)}
     return {"status": result.state.lower()}
+
+

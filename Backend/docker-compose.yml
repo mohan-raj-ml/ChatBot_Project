@@ -1,0 +1,47 @@
+version: "3.9"
+services:
+  ollama1:
+    image: ollama/ollama
+    container_name: ollama1
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama1_data:/root/.ollama
+    restart: always
+    command: serve
+
+  ollama2:
+    image: ollama/ollama
+    container_name: ollama2
+    ports:
+      - "11436:11434"
+    volumes:
+      - ollama2_data:/root/.ollama
+    restart: always
+    command: serve
+
+  ollama3:
+    image: ollama/ollama
+    container_name: ollama3
+    ports:
+      - "11437:11434"
+    volumes:
+      - ollama3_data:/root/.ollama
+    restart: always
+    command: serve
+
+  ollama4:
+    image: ollama/ollama
+    container_name: ollama4
+    ports:
+      - "11438:11434"
+    volumes:
+      - ollama4_data:/root/.ollama
+    restart: always
+    command: serve
+
+volumes:
+  ollama1_data:
+  ollama2_data:
+  ollama3_data:
+  ollama4_data:

@@ -45,8 +45,21 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+import itertools
+import threading
+
+OLLAMA_PORTS = [11434, 11436, 11437, 11438]
+_round_robin_lock = threading.Lock()
+_round_robin_cycle = itertools.cycle(OLLAMA_PORTS)
+
 class OllamaLLM(LLM):
     model: str = "mistral"
+
+    def pick_host(self) -> str:
+        with _round_robin_lock:
+            port = next(_round_robin_cycle)
+        print(f"[DEBUG] Using Ollama on port {port}")
+        return f"http://localhost:{port}/api/generate"
 
     def _call(
         self,
@@ -55,7 +68,8 @@ class OllamaLLM(LLM):
         run_manager: Optional[CallbackManagerForLLMRun] = None
     ) -> str:
         try:
-            res = requests.post("http://localhost:11434/api/generate", json={
+            url = self.pick_host()
+            res = requests.post(url, json={
                 "model": self.model,
                 "prompt": prompt,
                 "stream": False
@@ -63,7 +77,7 @@ class OllamaLLM(LLM):
             res.raise_for_status()
             return res.json().get("response", "").strip()
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error communicating with Ollama server ({self.model}): {e}")
+            logger.error(f"Error communicating with Ollama server ({self.model}) on {url}: {e}")
             raise HTTPException(status_code=503, detail=f"Failed to connect to Ollama model '{self.model}'.")
         except Exception as e:
             logger.error(f"Unexpected error in OllamaLLM call: {e}")
@@ -76,8 +90,9 @@ class OllamaLLM(LLM):
         run_manager: Optional[CallbackManagerForLLMRun] = None
     ) -> str:
         try:
+            url = self.pick_host()
             async with aiohttp.ClientSession() as session:
-                async with session.post("http://localhost:11434/api/generate", json={
+                async with session.post(url, json={
                     "model": self.model,
                     "prompt": prompt,
                     "stream": False
